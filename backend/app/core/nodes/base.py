@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 from pydantic import BaseModel, Field
 
 class NodeContext(BaseModel):
@@ -10,6 +10,9 @@ class NodeContext(BaseModel):
     variables: Dict[str, Any] = Field(default_factory=dict)
     execution_id: str
     workflow_id: str
+    current_node_id: Optional[str] = None
+    errors: List[str] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
     
     def get(self, key: str, default: Any = None) -> Any:
         return self.variables.get(key, default)

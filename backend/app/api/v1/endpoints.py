@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from app.schemas.basic import OrganizationCreate, OrganizationResponse, UserCreate, UserResponse, WorkflowCreate, WorkflowResponse, ExecutionCreate, ExecutionResponse
 from typing import List
 import uuid
@@ -76,14 +76,12 @@ async def create_version(wf_id: str):
     return {"message": "Version created successfully", "version": "v2"}
 
 @wf_router.post("/{wf_id}/execute", response_model=ExecutionResponse)
-async def execute_workflow(wf_id: str, exec_data: ExecutionCreate):
+async def execute_workflow(wf_id: str, exec_data: ExecutionCreate, request: Request):
     if wf_id not in MOCK_DB["workflows"]:
         raise HTTPException(status_code=404, detail="Workflow not found")
     
     from app.models.execution import Execution
-    from arq import create_pool
-    from arq.connections import RedisSettings
-    from app.core.settings import settings
+    from app.models.enums import ExecutionStatus
     
     # We will use the MOCK_DB workflow data for now but persist Execution to Beanie
     # so the ARQ worker can read it.
@@ -91,22 +89,25 @@ async def execute_workflow(wf_id: str, exec_data: ExecutionCreate):
         workflow_id=wf_id,
         workflow_version_id=MOCK_DB["workflows"][wf_id]["current_version"],
         organization_id=MOCK_DB["workflows"][wf_id]["organization_id"],
-        status="Queued",
+        status=ExecutionStatus.QUEUED,
         trigger_type=exec_data.trigger_type,
         started_at=datetime.utcnow().isoformat()
     )
     # Save to MongoDB
     await new_exec.insert()
     
-    # Enqueue in ARQ
-    redis = await create_pool(RedisSettings.from_dsn(settings.db.redis_url))
-    await redis.enqueue_job("run_workflow", str(new_exec.id))
+    # Enqueue in ARQ using the app state pool
+    if hasattr(request.app.state, "redis"):
+        await request.app.state.redis.enqueue_job("run_workflow", str(new_exec.id))
+    else:
+        # Fallback if redis wasn't connected
+        pass
     
     return ExecutionResponse(
         id=str(new_exec.id),
         workflow_id=new_exec.workflow_id,
         workflow_version_id=new_exec.workflow_version_id,
-        status=new_exec.status,
+        status=new_exec.status.value,
         started_at=new_exec.started_at,
         duration=new_exec.duration,
         trigger_type=new_exec.trigger_type

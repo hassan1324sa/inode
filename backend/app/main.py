@@ -9,6 +9,9 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+from arq import create_pool
+from arq.connections import RedisSettings
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -18,12 +21,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Could not connect to MongoDB: {e}")
         logger.warning("Starting API without database connection (for /docs preview only)")
+        
+    try:
+        app.state.redis = await create_pool(RedisSettings.from_dsn(settings.db.redis_url))
+        logger.info("Connected to ARQ Redis")
+    except Exception as e:
+        logger.error(f"Could not connect to Redis: {e}")
     
     yield
     
     # Shutdown
     logger.info("Shutting down Fluxa API...")
     await db_manager.close_db()
+    if hasattr(app.state, "redis"):
+        await app.state.redis.close()
 
 app = FastAPI(
     title=settings.app_name,
