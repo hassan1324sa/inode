@@ -5,8 +5,6 @@ motor
 pydantic-settings
 python-jose
 passlib
-redis
-arq
 python-dotenv
 pytest
 httpx

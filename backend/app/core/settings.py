@@ -10,7 +10,9 @@ class JWTSettings(BaseSettings):
 class DatabaseSettings(BaseSettings):
     mongo_uri: str = Field("mongodb://localhost:27017", env="MONGO_URI")
     database_name: str = Field("fluxa", env="DATABASE_NAME")
-    redis_url: str = Field("redis://localhost:6379", env="REDIS_URL")
+
+class CacheSettings(BaseSettings):
+    ttl: int = Field(300, env="CACHE_TTL")
 
 class Settings(BaseSettings):
     app_name: str = Field("Fluxa", env="APP_NAME")
@@ -18,6 +20,7 @@ class Settings(BaseSettings):
     
     jwt: JWTSettings = JWTSettings()
     db: DatabaseSettings = DatabaseSettings()
+    cache: CacheSettings = CacheSettings()
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
