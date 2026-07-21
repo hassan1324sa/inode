@@ -47,8 +47,8 @@ async def lifespan(app: FastAPI):
         stale_executions = await Execution.find(Execution.status == ExecutionStatus.RUNNING).to_list()
         for exec_doc in stale_executions:
             exec_doc.status = ExecutionStatus.FAILED
+            exec_doc.error = "Execution interrupted due to server restart/shutdown."
             exec_doc.nodes_snapshot = getattr(exec_doc, "nodes_snapshot", []) # Fallback
-            # Wait, Execution model doesn't have an error field, but we can just mark it failed
             await exec_doc.save()
             logger.info(f"Marked stale RUNNING execution as FAILED: {exec_doc.id}")
     except Exception as e:

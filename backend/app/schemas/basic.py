@@ -51,3 +51,4 @@ class ExecutionResponse(BaseModel):
     started_at: Optional[str]
     duration: Optional[float]
     trigger_type: str
+    error: Optional[str] = None

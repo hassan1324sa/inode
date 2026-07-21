@@ -12,6 +12,7 @@ class Execution(BaseDocument):
     duration: Optional[float] = None
     trigger_type: str = "Manual"
     retry_count: int = 0
+    error: Optional[str] = None
     nodes_snapshot: List[Dict[str, Any]] = []
     edges_snapshot: List[Dict[str, Any]] = []
 

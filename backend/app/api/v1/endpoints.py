@@ -207,7 +207,8 @@ async def execute_workflow(wf_id: str, exec_data: ExecutionCreate, request: Requ
         status=new_exec.status.value,
         started_at=new_exec.started_at,
         duration=new_exec.duration,
-        trigger_type=new_exec.trigger_type
+        trigger_type=new_exec.trigger_type,
+        error=new_exec.error
     )
 
 @wf_router.get("/{wf_id}/executions", response_model=List[ExecutionResponse])
@@ -226,7 +227,8 @@ async def list_executions(wf_id: str, request: Request):
             status=ex.status.value,
             started_at=ex.started_at,
             duration=ex.duration,
-            trigger_type=ex.trigger_type
+            trigger_type=ex.trigger_type,
+            error=ex.error
         )
         for ex in executions
     ]

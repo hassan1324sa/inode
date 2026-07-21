@@ -87,6 +87,7 @@ async def run_workflow(execution_id: str, memory_cache: Any):
     except Exception as exc:
         logger.error(f"Execution {execution_id} failed: {exc}")
         execution.status = ExecutionStatus.FAILED
+        execution.error = str(exc)
         execution.finished_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
         if execution.started_at:
             start_dt = datetime.datetime.fromisoformat(execution.started_at)
