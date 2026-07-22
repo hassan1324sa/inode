@@ -47,6 +47,19 @@ services:
     volumes:
       - temporal_data:/var/lib/temporal
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
 volumes:
   mongo_data:
   temporal_data:
+
