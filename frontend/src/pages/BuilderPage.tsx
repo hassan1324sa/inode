@@ -146,9 +146,9 @@ export const BuilderPage: React.FC = () => {
       </div>
 
       {/* Floating shortcut help banner */}
-      <div className="absolute bottom-4 left-[300px] flex items-center gap-4 bg-slate-900/90 border border-border rounded-md px-3 py-1.5 text-[10px] text-muted-foreground z-10 glass">
+      <div className="absolute bottom-4 left-[300px] flex items-center gap-4 border border-black/40 rounded-xl px-3 py-1.5 text-[10px] text-muted-foreground z-10 skeuo-raised">
         <span className="flex items-center gap-1"><kbd className="bg-muted px-1.5 py-0.5 rounded font-mono">Delete</kbd> Delete node</span>
-        <span className="flex items-center gap-1"><kbd className="bg-muted px-1.5 py-0.5 rounded font-mono">Ctrl + K</kbd> Command palette</span>
+        <span className="flex items-center gap-1"><kbd className="bg-muted px-1.5 py-0.5 rounded font-mono">Ctrl+K / Alt+K</kbd> Command palette</span>
       </div>
 
       {/* Ctrl+K Command Overlay */}

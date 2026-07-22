@@ -10,16 +10,22 @@ export const CommandPalette: React.FC = () => {
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'k' || e.code === 'KeyK')) {
+      const isCtrlK = (e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'k' || e.code === 'KeyK');
+      const isAltK = e.altKey && (e.key.toLowerCase() === 'k' || e.code === 'KeyK');
+      const isCtrlSlash = (e.ctrlKey || e.metaKey) && (e.key === '/' || e.code === 'Slash');
+
+      if (isCtrlK || isAltK || isCtrlSlash) {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         setCommandPaletteOpen(!commandPaletteOpen);
       }
       if (e.key === 'Escape' || e.code === 'Escape') {
         setCommandPaletteOpen(false);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, [commandPaletteOpen, setCommandPaletteOpen]);
 
   if (!commandPaletteOpen) return null;
