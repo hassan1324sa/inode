@@ -10,11 +10,11 @@ export const CommandPalette: React.FC = () => {
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'k' || e.code === 'KeyK')) {
         e.preventDefault();
         setCommandPaletteOpen(!commandPaletteOpen);
       }
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' || e.code === 'Escape') {
         setCommandPaletteOpen(false);
       }
     };

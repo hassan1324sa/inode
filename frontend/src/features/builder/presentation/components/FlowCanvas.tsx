@@ -75,16 +75,33 @@ export const FlowCanvas: React.FC = () => {
     selectNode(null);
   }, [selectNode]);
 
-  // Keyboard Delete node handler
+  // Keyboard Delete & Undo/Redo handler
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Delete' || e.key === 'Backspace') {
+      // Don't trigger if typing in fields
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA' || document.activeElement?.getAttribute('contenteditable') === 'true') {
+        return;
+      }
+
+      // Delete Node
+      if (e.key === 'Delete' || e.key === 'Backspace' || e.code === 'Delete' || e.code === 'Backspace') {
         const activeId = useWorkflowProjection.getState().selectedNodeId;
-        // Don't trigger if typing in fields
-        if (activeId && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        if (activeId) {
           CommandBus.dispatch(new DeleteNodeCommand(activeId));
           selectNode(null);
         }
+      }
+
+      // Undo (Ctrl+Z)
+      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'z' || e.code === 'KeyZ')) {
+        e.preventDefault();
+        CommandBus.undo();
+      }
+
+      // Redo (Ctrl+Y)
+      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || e.code === 'KeyY')) {
+        e.preventDefault();
+        CommandBus.redo();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
