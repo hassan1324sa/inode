@@ -22,27 +22,42 @@ export const CustomNode: React.FC<NodeProps> = ({ data, selected }) => {
   const IconComponent = (Icons as any)[plugin.icon] || Icons.HelpCircle;
 
   return (
-    <div className={`relative flex flex-col min-w-[240px] rounded-lg shadow-lg border transition-all duration-200 glass ${
-      selected ? 'border-primary shadow-primary/20 ring-2 ring-primary/20 scale-102' : 'border-border'
+    <div className={`relative flex flex-col min-w-[240px] rounded-xl transition-all duration-200 skeuo-raised ${
+      selected ? 'border-primary/80 ring-2 ring-primary/40 scale-102' : ''
     }`}>
-      {/* Handles */}
+      {/* Handles styled as physical port jacks */}
       {!plugin.capabilities.trigger && (
         <Handle
           type="target"
           position={Position.Left}
-          style={{ background: 'hsl(var(--primary))', width: 8, height: 8 }}
+          style={{
+            background: 'hsl(var(--input))',
+            border: '2px solid hsl(var(--border))',
+            boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.8), 0 1px 1px rgba(255,255,255,0.05)',
+            width: 12,
+            height: 12,
+            left: -6
+          }}
         />
       )}
       
       <Handle
         type="source"
         position={Position.Right}
-        style={{ background: 'hsl(var(--primary))', width: 8, height: 8 }}
+        style={{
+          background: 'hsl(var(--input))',
+          border: '2px solid hsl(var(--border))',
+          boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.8), 0 1px 1px rgba(255,255,255,0.05)',
+          width: 12,
+          height: 12,
+          right: -6
+        }}
       />
 
       {/* Header bar */}
-      <div className="flex items-center gap-3 px-4 py-3 rounded-t-lg border-b border-border/50" style={{ borderTop: `4px solid ${plugin.color}` }}>
-        <div className="p-1.5 rounded-md text-white" style={{ backgroundColor: plugin.color }}>
+      <div className="flex items-center gap-3 px-4 py-3 rounded-t-xl border-b border-black/40" style={{ borderTop: `4px solid ${plugin.color}` }}>
+        <div className="p-1.5 rounded-md text-white shadow-inner" style={{ backgroundColor: plugin.color, boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.2)' }}>
+
           <IconComponent size={16} />
         </div>
         <div className="flex flex-col text-left">

@@ -14,18 +14,19 @@ export const Sidebar: React.FC = () => {
   ];
 
   return (
-    <div className="w-[260px] h-full border-r border-border glass flex flex-col justify-between text-left p-4">
+    <div className="w-[260px] h-full flex flex-col justify-between text-left p-4 skeuo-raised rounded-r-2xl border-l-0">
       <div className="space-y-6">
         {/* Logo */}
         <div className="flex items-center gap-3 px-2 py-1">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary to-purple-500 flex items-center justify-center text-white font-bold shadow-md shadow-primary/20">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-primary to-purple-600 flex items-center justify-center text-white font-black shadow-lg shadow-primary/30 border border-primary/40" style={{ boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.4), 0 3px 6px rgba(0,0,0,0.4)' }}>
             F
           </div>
-          <span className="font-extrabold text-lg text-foreground tracking-tight">Fluxa</span>
+          <span className="font-extrabold text-lg text-foreground tracking-tight" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}>Fluxa</span>
         </div>
 
+
         {/* Navigation List */}
-        <nav className="space-y-1">
+        <nav className="space-y-2">
           {navItems.map((item) => {
             const Icon = (Icons as any)[item.icon] || Icons.HelpCircle;
             return (
@@ -33,11 +34,14 @@ export const Sidebar: React.FC = () => {
                 key={item.path}
                 to={item.path}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 ${
+                  `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-150 border border-transparent ${
                     isActive
-                      ? 'bg-primary text-white shadow-md shadow-primary/10'
-                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                      ? 'bg-primary text-white border-black/40 shadow-inner'
+                      : 'text-muted-foreground bg-gradient-to-b from-secondary to-muted hover:text-foreground hover:border-border'
                   }`
+                }
+                style={({ isActive }) => 
+                  isActive ? { boxShadow: 'inset 1px 2px 4px rgba(0,0,0,0.6)' } : { boxShadow: 'inset 0 1px 0px rgba(255,255,255,0.08), 0 2px 4px rgba(0,0,0,0.3)' }
                 }
               >
                 <Icon size={16} />
@@ -49,11 +53,11 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* Footer / Theme Toggle */}
-      <div className="pt-4 border-t border-border/50 flex items-center justify-between">
+      <div className="pt-4 border-t border-black/40 flex items-center justify-between">
         <span className="text-[10px] text-muted-foreground font-mono">v1.0.0</span>
         <button
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          className="p-2 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          className="p-2.5 rounded-lg text-muted-foreground hover:text-foreground skeuo-btn"
           title="Toggle Light/Dark Theme"
         >
           {theme === 'dark' ? <Icons.Sun size={15} /> : <Icons.Moon size={15} />}
@@ -63,3 +67,4 @@ export const Sidebar: React.FC = () => {
   );
 };
 export default Sidebar;
+
