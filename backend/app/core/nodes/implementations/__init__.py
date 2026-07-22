@@ -1,1 +1,1 @@
-from .set_variable import SetVariableNode
+from .set_variable import SetVariableExecutor

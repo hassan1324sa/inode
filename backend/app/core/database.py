@@ -14,6 +14,11 @@ class DatabaseManager:
             document_models = []
         logger.info("Connecting to MongoDB...")
         cls.client = AsyncIOMotorClient(settings.db.mongo_uri)
+        # Patch the client to prevent Beanie 2.1.0 from attempting to call
+        # append_metadata on the Motor client (which dynamically returns a Database,
+        # leading to TypeError: MotorDatabase object is not callable).
+        cls.client.append_metadata = None
+        
         await init_beanie(
             database=cls.client[settings.db.database_name],
             document_models=document_models

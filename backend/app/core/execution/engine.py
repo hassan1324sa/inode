@@ -1,98 +1,58 @@
-import datetime
-from bson import ObjectId
-from app.models.execution import Execution
-from app.models.workflow_version import WorkflowVersion
-from app.models.node_execution import NodeExecution
-from app.models.enums import ExecutionStatus
-from app.core.nodes.base import NodeContext
-from app.core.nodes.factory import NodeFactory
 import logging
-from typing import Any
+from typing import Dict, Any
+from app.core.execution.context import ExecutionContext
+from app.core.nodes.node_executor import NodeExecutorRegistry
+import json
 
-logger = logging.getLogger(__name__)
+# Force registration of node executors
+import app.core.nodes.implementations  # noqa: F401
 
-async def run_workflow(execution_id: str, memory_cache: Any):
-    logger.info(f"Engine starting execution {execution_id}")
-    try:
-        exec_oid = ObjectId(execution_id)
-    except Exception:
-        logger.error(f"Invalid execution_id format: {execution_id}")
-        return
+logger = logging.getLogger("fluxa.execution_engine")
 
-    execution = await Execution.get(exec_oid)
-    if not execution:
-        logger.error(f"Execution {execution_id} not found in DB")
-        return
+class ExecutionEngine:
+    """
+    A stateless engine to route and execute workflow nodes.
+    """
 
-    execution.status = ExecutionStatus.RUNNING
-    execution.started_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    await execution.save()
-    
-    await memory_cache.delete(f"execution:{execution_id}")
-    await memory_cache.delete(f"workflow_executions:{execution.workflow_id}")
-
-    try:
-        wf_version = await WorkflowVersion.find_one(
-            WorkflowVersion.workflow_id == execution.workflow_id,
-            WorkflowVersion.version == execution.workflow_version_id
-        )
-        if not wf_version:
-            raise ValueError(f"WorkflowVersion not found for {execution.workflow_id} @ {execution.workflow_version_id}")
-
-        context = NodeContext(
-            execution_id=execution_id,
-            workflow_id=execution.workflow_id,
-            current_node_id=None
+    async def execute_node(self, node_data: Dict[str, Any], context: ExecutionContext) -> ExecutionContext:
+        node_id = node_data.get("id", "unknown")
+        node_type = node_data.get("type", "unknown")
+        
+        # Structured Logging with Correlation IDs
+        log_extra = {
+            "execution_id": context.execution_id,
+            "workflow_definition_id": context.workflow_definition_id,
+            "workflow_definition_version": context.workflow_definition_version,
+            "tenant_id": context.tenant_id,
+            "node_id": node_id,
+            "node_type": node_type
+        }
+        
+        logger.info(
+            f"Executing node: {node_id} of type: {node_type}",
+            extra={"structured_log": log_extra}
         )
 
-        # NodeFactory will need the registry to be populated, make sure implementations are imported in main.py or __init__
-        import app.core.nodes.implementations  # Ensure implementations are registered
+        executor = NodeExecutorRegistry.get_executor(node_type)
+        if not executor:
+            err_msg = f"No executor registered for node type: {node_type}"
+            logger.error(err_msg, extra={"structured_log": log_extra})
+            raise ValueError(err_msg)
 
-        for node_def in wf_version.nodes:
-            node = NodeFactory.create_node(node_def)
-            context.current_node_id = node.id
-            node_start = datetime.datetime.now(datetime.timezone.utc)
+        try:
+            context.current_node_id = node_id
+            context = await executor.execute(node_data, context)
             
-            node_exec = NodeExecution(
-                execution_id=execution_id,
-                node_id=node.id,
-                status=ExecutionStatus.RUNNING,
-                started_at=node_start.isoformat(),
-                input=node_def
+            logger.info(
+                f"Successfully completed node: {node_id}",
+                extra={"structured_log": {**log_extra, "status": "completed"}}
             )
-            await node_exec.insert()
+            return context
             
-            try:
-                context = await node.execute(context)
-                node_exec.status = ExecutionStatus.COMPLETED
-                node_exec.output = {"variables": context.variables}
-            except Exception as e:
-                node_exec.status = ExecutionStatus.FAILED
-                node_exec.error = str(e)
-                context.errors.append(str(e))
-                raise e
-            finally:
-                node_end = datetime.datetime.now(datetime.timezone.utc)
-                node_exec.finished_at = node_end.isoformat()
-                node_exec.duration = (node_end - node_start).total_seconds()
-                await node_exec.save()
-
-        execution.status = ExecutionStatus.COMPLETED
-        execution.finished_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        if execution.started_at:
-            start_dt = datetime.datetime.fromisoformat(execution.started_at)
-            execution.duration = (datetime.datetime.now(datetime.timezone.utc) - start_dt).total_seconds()
-        await execution.save()
-
-    except Exception as exc:
-        logger.error(f"Execution {execution_id} failed: {exc}")
-        execution.status = ExecutionStatus.FAILED
-        execution.error = str(exc)
-        execution.finished_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        if execution.started_at:
-            start_dt = datetime.datetime.fromisoformat(execution.started_at)
-            execution.duration = (datetime.datetime.now(datetime.timezone.utc) - start_dt).total_seconds()
-        await execution.save()
-    finally:
-        await memory_cache.delete(f"execution:{execution_id}")
-        await memory_cache.delete(f"workflow_executions:{execution.workflow_id}")
+        except Exception as e:
+            logger.error(
+                f"Failed to execute node {node_id}: {str(e)}",
+                exc_info=True,
+                extra={"structured_log": {**log_extra, "status": "failed", "error": str(e)}}
+            )
+            raise e

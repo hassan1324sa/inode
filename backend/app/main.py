@@ -3,8 +3,7 @@ from contextlib import asynccontextmanager
 from app.core.settings import settings
 from app.core.database import db_manager
 from app.core.cache.memory import MemoryCache
-from app.core.execution.worker import execution_worker
-import asyncio
+from app.core.execution.service import ExecutionService
 import logging
 
 from app.models.user import User
@@ -35,43 +34,12 @@ async def lifespan(app: FastAPI):
         logger.warning("Starting API without database connection (for /docs preview only)")
         
     app.state.memory_cache = MemoryCache()
-    app.state.execution_queue = asyncio.Queue()
-    
-    # Startup Recovery
-    try:
-        queued_executions = await Execution.find(Execution.status == ExecutionStatus.QUEUED).to_list()
-        for exec_doc in queued_executions:
-            await app.state.execution_queue.put(str(exec_doc.id))
-            logger.info(f"Recovered QUEUED execution: {exec_doc.id}")
-            
-        stale_executions = await Execution.find(Execution.status == ExecutionStatus.RUNNING).to_list()
-        for exec_doc in stale_executions:
-            exec_doc.status = ExecutionStatus.FAILED
-            exec_doc.error = "Execution interrupted due to server restart/shutdown."
-            exec_doc.nodes_snapshot = getattr(exec_doc, "nodes_snapshot", []) # Fallback
-            await exec_doc.save()
-            logger.info(f"Marked stale RUNNING execution as FAILED: {exec_doc.id}")
-    except Exception as e:
-        logger.error(f"Error during startup recovery: {e}")
-    
-    # Start worker
-    app.state.execution_worker_task = asyncio.create_task(
-        execution_worker(app.state.execution_queue, app.state.memory_cache)
-    )
-    logger.info("Background execution worker started.")
+    app.state.execution_service = ExecutionService()
     
     yield
     
     # Shutdown
     logger.info("Shutting down Fluxa API...")
-    
-    if hasattr(app.state, "execution_worker_task"):
-        app.state.execution_worker_task.cancel()
-        try:
-            await asyncio.gather(app.state.execution_worker_task, return_exceptions=True)
-        except asyncio.CancelledError:
-            pass
-            
     await db_manager.close_db()
 
 app = FastAPI(

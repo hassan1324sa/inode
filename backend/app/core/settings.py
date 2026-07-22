@@ -1,5 +1,8 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class JWTSettings(BaseSettings):
     secret: str = Field("super_secret_key_change_me", env="JWT_SECRET")
@@ -14,6 +17,9 @@ class DatabaseSettings(BaseSettings):
 class CacheSettings(BaseSettings):
     ttl: int = Field(300, env="CACHE_TTL")
 
+class TemporalSettings(BaseSettings):
+    host: str = Field("localhost:7233", env="TEMPORAL_HOST")
+
 class Settings(BaseSettings):
     app_name: str = Field("Fluxa", env="APP_NAME")
     env: str = Field("development", env="ENV")
@@ -21,6 +27,7 @@ class Settings(BaseSettings):
     jwt: JWTSettings = JWTSettings()
     db: DatabaseSettings = DatabaseSettings()
     cache: CacheSettings = CacheSettings()
+    temporal: TemporalSettings = TemporalSettings()
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

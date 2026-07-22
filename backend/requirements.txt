@@ -8,3 +8,4 @@ passlib
 python-dotenv
 pytest
 httpx
+temporalio

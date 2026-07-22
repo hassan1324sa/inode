@@ -183,6 +183,13 @@ async def execute_workflow(wf_id: str, exec_data: ExecutionCreate, request: Requ
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
         
+    # Fetch current version nodes
+    wf_version = await WorkflowVersion.find_one(
+        WorkflowVersion.workflow_id == wf_id,
+        WorkflowVersion.version == wf.current_version
+    )
+    nodes = wf_version.nodes if wf_version else []
+
     new_exec = Execution(
         workflow_id=wf_id,
         workflow_version_id=wf.current_version,
@@ -195,8 +202,19 @@ async def execute_workflow(wf_id: str, exec_data: ExecutionCreate, request: Requ
     )
     await new_exec.insert()
     
-    # Enqueue
-    await request.app.state.execution_queue.put(str(new_exec.id))
+    # Trigger execution using ExecutionService
+    try:
+        await request.app.state.execution_service.start_execution(
+            execution_id=str(new_exec.id),
+            workflow_definition_id=wf_id,
+            tenant_id=wf.organization_id,
+            nodes=nodes
+        )
+    except Exception as e:
+        new_exec.status = ExecutionStatus.FAILED
+        new_exec.error = f"Failed to start Temporal workflow: {str(e)}"
+        await new_exec.save()
+        raise HTTPException(status_code=500, detail=str(e))
     
     await request.app.state.memory_cache.delete(f"workflow_executions:{wf_id}")
     
@@ -210,6 +228,30 @@ async def execute_workflow(wf_id: str, exec_data: ExecutionCreate, request: Requ
         trigger_type=new_exec.trigger_type,
         error=new_exec.error
     )
+
+@wf_router.post("/{wf_id}/executions/{exec_id}/pause")
+async def pause_execution(wf_id: str, exec_id: str, request: Request):
+    try:
+        await request.app.state.execution_service.pause_execution(exec_id)
+        return {"message": "Pause signal sent successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@wf_router.post("/{wf_id}/executions/{exec_id}/resume")
+async def resume_execution(wf_id: str, exec_id: str, request: Request):
+    try:
+        await request.app.state.execution_service.resume_execution(exec_id)
+        return {"message": "Resume signal sent successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@wf_router.post("/{wf_id}/executions/{exec_id}/cancel")
+async def cancel_execution(wf_id: str, exec_id: str, request: Request):
+    try:
+        await request.app.state.execution_service.cancel_execution(exec_id)
+        return {"message": "Cancellation request sent successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @wf_router.get("/{wf_id}/executions", response_model=List[ExecutionResponse])
 async def list_executions(wf_id: str, request: Request):
