@@ -24,6 +24,8 @@ export function mapEdgeToReactFlow(edge: WorkflowEdge): RFEdge {
     targetHandle: edge.targetHandle,
     type: 'smoothstep',
     animated: true,
+    style: { stroke: 'hsl(var(--primary))', strokeWidth: 3 },
+    className: 'glowing-edge',
   };
 }
 

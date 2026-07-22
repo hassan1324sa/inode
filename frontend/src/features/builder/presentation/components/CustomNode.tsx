@@ -22,9 +22,15 @@ export const CustomNode: React.FC<NodeProps> = ({ data, selected }) => {
   const IconComponent = (Icons as any)[plugin.icon] || Icons.HelpCircle;
 
   return (
-    <div className={`relative flex flex-col min-w-[240px] rounded-xl transition-all duration-200 skeuo-raised ${
-      selected ? 'border-primary/80 ring-2 ring-primary/40 scale-102' : ''
-    }`}>
+    <div className={`relative flex flex-col min-w-[250px] rounded-2xl transition-all duration-200 skeuo-raised skeuo-glare ${
+      selected ? 'ring-2 ring-primary/60 scale-102' : ''
+    }`} style={{ boxShadow: selected ? '0 0 15px rgba(139, 92, 246, 0.4), inset 0 1px 0px rgba(255,255,255,0.15)' : 'inset 0 1px 0px rgba(255,255,255,0.12), 0 4px 12px rgba(0,0,0,0.5)' }}>
+      {/* Decorative Corner Screws */}
+      <div className="absolute top-2 left-2 skeuo-screw z-10" />
+      <div className="absolute top-2 right-2 skeuo-screw z-10" />
+      <div className="absolute bottom-2 left-2 skeuo-screw z-10" />
+      <div className="absolute bottom-2 right-2 skeuo-screw z-10" />
+
       {/* Handles styled as physical port jacks */}
       {!plugin.capabilities.trigger && (
         <Handle
@@ -32,11 +38,11 @@ export const CustomNode: React.FC<NodeProps> = ({ data, selected }) => {
           position={Position.Left}
           style={{
             background: 'hsl(var(--input))',
-            border: '2px solid hsl(var(--border))',
-            boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.8), 0 1px 1px rgba(255,255,255,0.05)',
-            width: 12,
-            height: 12,
-            left: -6
+            border: '2.5px solid #7f8c8d',
+            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.9), 0 1px 1px rgba(255,255,255,0.1)',
+            width: 14,
+            height: 14,
+            left: -7
           }}
         />
       )}
@@ -46,23 +52,23 @@ export const CustomNode: React.FC<NodeProps> = ({ data, selected }) => {
         position={Position.Right}
         style={{
           background: 'hsl(var(--input))',
-          border: '2px solid hsl(var(--border))',
-          boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.8), 0 1px 1px rgba(255,255,255,0.05)',
-          width: 12,
-          height: 12,
-          right: -6
+          border: '2.5px solid #7f8c8d',
+          boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.9), 0 1px 1px rgba(255,255,255,0.1)',
+          width: 14,
+          height: 14,
+          right: -7
         }}
       />
 
       {/* Header bar */}
-      <div className="flex items-center gap-3 px-4 py-3 rounded-t-xl border-b border-black/40" style={{ borderTop: `4px solid ${plugin.color}` }}>
-        <div className="p-1.5 rounded-md text-white shadow-inner" style={{ backgroundColor: plugin.color, boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.2)' }}>
-
+      <div className="flex items-center gap-3 px-6 py-4 rounded-t-2xl border-b border-black/50" style={{ borderTop: `4px solid ${plugin.color}` }}>
+        <div className="p-2 rounded-lg text-white shadow-lg" style={{ backgroundColor: plugin.color, boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.3), 0 2px 4px rgba(0,0,0,0.3)' }}>
           <IconComponent size={16} />
         </div>
         <div className="flex flex-col text-left">
-          <span className="font-semibold text-sm text-foreground">{plugin.metadata.name}</span>
-          <span className="text-xs text-muted-foreground">{plugin.metadata.category}</span>
+          <span className="font-extrabold text-sm text-foreground skeuo-embossed">{plugin.metadata.name}</span>
+          <span className="text-[10px] text-muted-foreground font-mono tracking-wider uppercase">{plugin.metadata.category}</span>
+
         </div>
       </div>
 
