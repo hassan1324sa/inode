@@ -15,12 +15,20 @@ export class MockTransport implements EventTransport {
   public connect(executionId: string): void {
     console.log(`[EventTransport] Mock connecting to stream for execution: ${executionId}`);
     
-    // Simulate streaming execution events
+    // Simulate streaming execution events for the AI enrichment scenario
     const steps = [
-      { type: 'NODE_STARTED', nodeId: 'node-1', duration: 0 },
-      { type: 'NODE_COMPLETED', nodeId: 'node-1', duration: 1.2, output: { variable_value: '42' } },
-      { type: 'WORKFLOW_COMPLETED', duration: 1.2 }
+      { type: 'NODE_STARTED', nodeId: 'node-set-variable', duration: 0 },
+      { type: 'NODE_COMPLETED', nodeId: 'node-set-variable', duration: 0.1, output: { variable_name: 'customer_email', variable_value: 'lead@corporate.com' } },
+      
+      { type: 'NODE_STARTED', nodeId: 'node-http-request', duration: 0 },
+      { type: 'NODE_COMPLETED', nodeId: 'node-http-request', duration: 1.4, output: { status: 200, lead_score: 95, company: 'Corporate Inc' } },
+      
+      { type: 'NODE_STARTED', nodeId: 'node-ai-agent', duration: 0 },
+      { type: 'NODE_COMPLETED', nodeId: 'node-ai-agent', duration: 2.1, output: { generated_proposal: 'Dear Corporate Inc, we noticed your team...' } },
+      
+      { type: 'WORKFLOW_COMPLETED', duration: 3.6 }
     ];
+
     
     let stepIndex = 0;
     this.intervalId = setInterval(() => {
