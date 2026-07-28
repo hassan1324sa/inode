@@ -1,18 +1,17 @@
-# Fluxa Master Roadmap - Remaining Phases (8 to 12)
+# Fluxa Master Roadmap - Remaining Phases (8 to 13)
 
-This document outlines the strategic roadmap and technical architecture for the remaining phases of the Fluxa Agentic Operating System, updated with approved enterprise-grade modular designs.
+This document outlines the strategic roadmap and technical architecture for the remaining phases of the Fluxa Agentic Operating System.
 
 ---
 
-## Phase 8: Agent Runtime, Planner, Memory & Knowledge Layer
+## Phase 8: Agent Kernel, Planner, Memory & Knowledge Layer
 Transforms Fluxa from a structured workflow executor into a reasoning Agent Kernel.
 
 ### 8.1 Agent Kernel & Reasoning Loop
-* **Runtime Abstraction**: `AgentRuntime` and `WorkflowRuntime` share a common `Runtime` interface, keeping agent reasoning decoupled from workflow orchestrations.
-* **Planner & Abstract Plan**: The `Planner` produces a modular `Plan` (reasoning steps/tool dependencies) executed by a separate `PlanExecutor`, enabling human approvals and parallelization.
-* **Reason-Tool-Observe Loop**: Core engine execution loop resolving thoughts, executing tools, and capturing outputs.
-* **Planner Strategy Interface**: Swappable planner engines (e.g., `SequentialPlanner`, `ReActPlanner`, `PlanAndSolvePlanner`, `TreeOfThoughtPlanner`).
-* **Tool Capability Negotiation**: Tool execution flows through standard stages: **Discover**, **Validate**, **Negotiate**, and **Execute** for dynamic tool selection.
+* **AgentKernel Abstraction**: Coordinates Planner, PlanExecutor, ToolExecutor, Memory, and Knowledge components. The execution engine loop remains clean and decoupled from LLM logic.
+* **Planner & Abstract Plan**: Swappable planner engines (e.g., `SequentialPlanner`, `ReActPlanner`, `PlanAndSolvePlanner`, `TreeOfThoughtPlanner`) that generate an abstract `Plan` processed by a separate `PlanExecutor`.
+* **Tool Capability Negotiation**: Tools execute through standard stages: **Discover**, **Validate**, **Negotiate**, and **Execute**.
+* **Tool Registry**: Common tool interface mapping Slack tools, Python scripts, Search tools, and MCP tools under a single registry layer.
 
 ### 8.2 Memory vs. Knowledge Layer
 * **Memory Layer**:
@@ -21,6 +20,9 @@ Transforms Fluxa from a structured workflow executor into a reasoning Agent Kern
 * **Knowledge Layer**: Separated document store, embeddings, chunking pipeline, semantic search retrieval, and source citation engine.
 * **Skills as Packages**: Reusable package structures containing a manifest, tool schemas, templates, and optional memory rules.
 * **Event-Driven Agent Communication**: Agents communicate strictly via the task dispatcher and `ExecutionEventBus`.
+
+### 8.3 AI Governance
+* Centralized components: **Prompt Templates**, **Prompt Registry**, **Model Routing**, **Fallback Chain**, **Cost Budget**, **Safety Policies**, **Output Validators**, and **Structured Output Parsers**.
 
 ---
 
@@ -31,9 +33,8 @@ Building user interfaces for visual building and runtime monitoring.
 * **FastAPI Backend Endpoints**: Full API coverage for compiling, triggering, and managing workflows and agent sessions.
 * **Visual Live Builder Bindings**: Dynamically generates visual UI blocks matching registry schemas.
 
-### 9.2 Real-time Visual Execution
-* **WebSocket logs & state**: Real-time event streams capturing running executions.
-* **Execution Replay**: Allows visual state debugging of snapshot history logs.
+### 9.2 Event-Driven Execution Stream
+* **Execution Event Stream -> Projection -> Dashboard**: Real-time event streams capturing running executions to power live updates, notifications, replay, and analytics.
 
 ---
 
@@ -41,11 +42,11 @@ Building user interfaces for visual building and runtime monitoring.
 Adding security and cost tracking.
 
 ### Key Objectives
-* **Workspace Isolation**: Logical partitioning of database records, caches, and workers per Tenant ID.
+* **Tenant Hierarchy**: Organizational structure supporting Organization -> Workspace -> Environment -> Project.
+* **Workspace Isolation**: Logical partitioning of database records, caches, and workers.
 * **Access Control**: Dynamic Attribute-Based Access Control (ABAC) in addition to Role-Based Access Control (RBAC).
 * **HashiCorp Vault Integration**: Secure credential vault with automatic secret rotation.
 * **Quotas & Cost Tracking**: Token usage tracking, budget enforcement, and node rate limiting.
-* **AI Governance**: Prompt Versioning, Prompt Registry, Model Routing with Fallbacks, Cost Policies, and Safety Guardrails.
 
 ---
 
@@ -53,9 +54,10 @@ Adding security and cost tracking.
 Enabling modular extension distributions.
 
 ### Key Objectives
-* **MCP Provider Registry Integration**: Model Context Protocol (MCP) clients register as drivers inside the `Provider Registry`, exposing external tool servers seamlessly.
+* **MCP Provider Registry Integration**: Model Context Protocol (MCP) clients register as drivers inside the `Provider Registry`.
 * **Fluxa CLI**: Project initializer and package installer (`fluxa install <package>`).
 * **Package Marketplace**: Registry feed supporting dependency installation.
+* **Package Signing & Verification**: Manifest, Signature, Hash, Publisher, and Dependency validation.
 
 ---
 
@@ -63,7 +65,16 @@ Enabling modular extension distributions.
 Preparing the operating system layer for cloud scale.
 
 ### Key Objectives
-* **Worker Scheduler & Worker Pool**: Core scaling scheduling layer allowing vertical and horizontal worker pools before Kubernetes provisioning.
+* **Distributed Scheduler**: Queue and priority scheduling (Scheduler -> Queue -> Workers -> Temporal).
 * **Kubernetes Orchestration**: Helm charts, horizontal scaling workers, and autoscaling.
 * **Production Observability**: Distributed tracing, Prometheus metrics, and OpenTelemetry.
 * **Chaos & Disaster Recovery**: Chaos testing and active-active failovers.
+
+---
+
+## Phase 13: Developer Experience (Optional/Future)
+Developer tools and SDKs to support external platform builders.
+
+### Key Objectives
+* **Developer SDKs**: Official Python and TypeScript SDKs for programmatically interacting with the platform.
+* **DX Frameworks**: Plugin Generator, Package Templates, Testing Framework, Local Emulator, Mock Providers, and Debug CLI.
