@@ -17,6 +17,7 @@ class ExecutionContext(BaseModel):
     current_node_id: Optional[str] = None
     started_at: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    permissions: List[str] = Field(default_factory=list)
 
     def get_variable(self, key: str, default: Any = None) -> Any:
         return self.variables.get(key, default)
