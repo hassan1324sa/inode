@@ -44,8 +44,14 @@ export const CommandPalette: React.FC = () => {
   );
 
   return (
-    <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-start justify-center pt-24">
-      <div className="w-[500px] bg-slate-900 border border-border rounded-lg shadow-2xl overflow-hidden text-left flex flex-col glass">
+    <div
+      className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-start justify-center pt-24"
+      onClick={() => setCommandPaletteOpen(false)}
+    >
+      <div
+        className="w-[500px] bg-card text-card-foreground border border-border rounded-lg shadow-2xl overflow-hidden text-left flex flex-col glass"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Search header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50">
           <Icons.Search className="text-muted-foreground" size={18} />

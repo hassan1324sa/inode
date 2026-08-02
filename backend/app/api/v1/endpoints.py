@@ -1,5 +1,9 @@
 from fastapi import APIRouter, HTTPException, Request
-from app.schemas.basic import OrganizationCreate, OrganizationResponse, UserCreate, UserResponse, WorkflowCreate, WorkflowResponse, ExecutionCreate, ExecutionResponse
+from app.schemas.basic import (
+    OrganizationCreate, OrganizationResponse, UserCreate, UserResponse,
+    WorkflowCreate, WorkflowResponse, ExecutionCreate, ExecutionResponse,
+    VersionCreate, VersionResponse
+)
 from typing import List
 from datetime import datetime, timezone
 import json
@@ -87,19 +91,19 @@ async def list_orgs(request: Request):
 
 wf_router = APIRouter(prefix="/workflows", tags=["Workflows"])
 
-@wf_router.post("/", response_model=WorkflowResponse)
-async def create_workflow(wf_data: WorkflowCreate, request: Request):
-    wf = Workflow(
-        organization_id=wf_data.organization_id,
-        name=wf_data.name,
-        description=wf_data.description,
-        current_version="v1",
-        status="Draft"
-    )
-    await wf.insert()
-    
-    await request.app.state.memory_cache.delete("workflows:all")
-    
+async def build_workflow_response(wf: Workflow) -> WorkflowResponse:
+    wv = await WorkflowVersion.find_one(WorkflowVersion.workflow_id == str(wf.id))
+    nodes = wv.nodes if wv and wv.nodes else []
+    edges = wv.edges if wv and wv.edges else []
+    variables = wv.settings.get("variables", {}) if wv and wv.settings else {}
+    metadata = {
+        "id": str(wf.id),
+        "name": wf.name,
+        "description": wf.description or "",
+        "tags": ["Enterprise", "AI", "Automation"],
+        "createdAt": "2026-08-01T20:00:00Z",
+        "updatedAt": "2026-08-01T20:00:00Z"
+    }
     return WorkflowResponse(
         id=str(wf.id),
         organization_id=wf.organization_id,
@@ -107,8 +111,47 @@ async def create_workflow(wf_data: WorkflowCreate, request: Request):
         description=wf.description,
         current_version=wf.current_version,
         published_version=wf.published_version,
-        status=wf.status
+        status=wf.status,
+        formatVersion=1,
+        engineVersion=1,
+        nodeRegistryVersion=1,
+        workflowVersion=1,
+        metadata=metadata,
+        variables=variables,
+        nodes=nodes,
+        edges=edges
     )
+
+@wf_router.post("/", response_model=WorkflowResponse)
+async def create_workflow(wf_data: WorkflowCreate, request: Request):
+    wf_name = wf_data.name
+    wf_desc = wf_data.description
+    if wf_data.metadata and isinstance(wf_data.metadata, dict):
+        wf_name = wf_data.metadata.get("name", wf_name)
+        wf_desc = wf_data.metadata.get("description", wf_desc)
+
+    wf = Workflow(
+        organization_id=wf_data.organization_id or "org-enterprise-01",
+        name=wf_name or "Untitled Workflow",
+        description=wf_desc,
+        current_version="v1",
+        status="Draft"
+    )
+    await wf.insert()
+    
+    if wf_data.nodes or wf_data.edges:
+        wv = WorkflowVersion(
+            workflow_id=str(wf.id),
+            version="v1",
+            nodes=wf_data.nodes or [],
+            edges=wf_data.edges or [],
+            settings={"variables": wf_data.variables or {}},
+            created_by="system"
+        )
+        await wv.insert()
+    
+    await request.app.state.memory_cache.delete("workflows:all")
+    return await build_workflow_response(wf)
 
 @wf_router.get("/", response_model=List[WorkflowResponse])
 async def list_workflows(request: Request):
@@ -118,26 +161,81 @@ async def list_workflows(request: Request):
         return cached_data
         
     wfs = await Workflow.find_all().to_list()
-    result = [
-        WorkflowResponse(
-            id=str(wf.id),
-            organization_id=wf.organization_id,
-            name=wf.name,
-            description=wf.description,
-            current_version=wf.current_version,
-            published_version=wf.published_version,
-            status=wf.status
-        )
-        for wf in wfs
-    ]
+    result = [await build_workflow_response(wf) for wf in wfs]
     
     await cache.set("workflows:all", result, ttl=settings.cache.ttl)
     return result
 
 from bson import ObjectId
 
-@wf_router.post("/{wf_id}/versions")
-async def create_version(wf_id: str, request: Request):
+@wf_router.get("/{wf_id}", response_model=WorkflowResponse)
+async def get_workflow(wf_id: str, request: Request):
+    try:
+        wf_oid = ObjectId(wf_id)
+        wf = await Workflow.get(wf_oid)
+    except Exception:
+        wf = await Workflow.find_one(Workflow.name == wf_id)
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return await build_workflow_response(wf)
+
+@wf_router.put("/{wf_id}", response_model=WorkflowResponse)
+async def update_workflow(wf_id: str, wf_data: WorkflowCreate, request: Request):
+    try:
+        wf_oid = ObjectId(wf_id)
+        wf = await Workflow.get(wf_oid)
+    except Exception:
+        wf = await Workflow.find_one(Workflow.name == wf_id)
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    if wf_data.name:
+        wf.name = wf_data.name
+    if wf_data.description is not None:
+        wf.description = wf_data.description
+    if wf_data.metadata and isinstance(wf_data.metadata, dict):
+        wf.name = wf_data.metadata.get("name", wf.name)
+        wf.description = wf_data.metadata.get("description", wf.description)
+    await wf.save()
+
+    wv = await WorkflowVersion.find_one(WorkflowVersion.workflow_id == str(wf.id))
+    if wv:
+        if wf_data.nodes is not None:
+            wv.nodes = wf_data.nodes
+        if wf_data.edges is not None:
+            wv.edges = wf_data.edges
+        if wf_data.variables is not None:
+            wv.settings["variables"] = wf_data.variables
+        await wv.save()
+    elif wf_data.nodes or wf_data.edges:
+        wv = WorkflowVersion(
+            workflow_id=str(wf.id),
+            version="v1",
+            nodes=wf_data.nodes or [],
+            edges=wf_data.edges or [],
+            settings={"variables": wf_data.variables or {}},
+            created_by="system"
+        )
+        await wv.insert()
+
+    await request.app.state.memory_cache.delete("workflows:all")
+    return await build_workflow_response(wf)
+
+@wf_router.delete("/{wf_id}")
+async def delete_workflow(wf_id: str, request: Request):
+    try:
+        wf_oid = ObjectId(wf_id)
+        wf = await Workflow.get(wf_oid)
+    except Exception:
+        wf = await Workflow.find_one(Workflow.name == wf_id)
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    await wf.delete()
+    await request.app.state.memory_cache.delete("workflows:all")
+    return {"message": "Workflow deleted successfully"}
+
+
+@wf_router.post("/{wf_id}/versions", response_model=VersionResponse)
+async def create_version(wf_id: str, request: Request, version_data: VersionCreate = VersionCreate()):
     try:
         wf_oid = ObjectId(wf_id)
     except Exception:
@@ -147,21 +245,18 @@ async def create_version(wf_id: str, request: Request):
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
         
-    new_version_str = "v2" # Naive version bump for demo
+    # Increment version string (e.g., v1 -> v2)
+    curr_num = int(wf.current_version.lstrip("v")) if wf.current_version.startswith("v") else 1
+    new_version_str = f"v{curr_num + 1}"
     wf.current_version = new_version_str
     await wf.save()
     
     wf_version = WorkflowVersion(
         workflow_id=wf_id,
         version=new_version_str,
-        nodes=[{
-            "id": "node-1",
-            "name": "Set Test Var",
-            "type": "set_variable",
-            "variable_name": "test_var",
-            "variable_value": 42
-        }],
-        edges=[],
+        nodes=version_data.nodes,
+        edges=version_data.edges,
+        settings=version_data.settings,
         created_by="system"
     )
     await wf_version.insert()
@@ -170,7 +265,53 @@ async def create_version(wf_id: str, request: Request):
     await request.app.state.memory_cache.delete(f"workflow:{wf_id}")
     await request.app.state.memory_cache.delete(f"workflow_version:{new_version_str}")
     
-    return {"message": "Version created successfully", "version": new_version_str}
+    return VersionResponse(
+        id=str(wf_version.id),
+        workflow_id=wf_version.workflow_id,
+        version=wf_version.version,
+        nodes=wf_version.nodes,
+        edges=wf_version.edges,
+        settings=wf_version.settings,
+        created_by=wf_version.created_by
+    )
+
+@wf_router.get("/{wf_id}/versions/latest", response_model=VersionResponse)
+async def get_latest_version(wf_id: str):
+    try:
+        wf_oid = ObjectId(wf_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid workflow ID")
+        
+    wf = await Workflow.get(wf_oid)
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+        
+    wf_version = await WorkflowVersion.find_one(
+        WorkflowVersion.workflow_id == wf_id,
+        WorkflowVersion.version == wf.current_version
+    )
+    if not wf_version:
+        # Fallback empty default version if none created yet
+        return VersionResponse(
+            id="default",
+            workflow_id=wf_id,
+            version=wf.current_version,
+            nodes=[],
+            edges=[],
+            settings={},
+            created_by="system"
+        )
+        
+    return VersionResponse(
+        id=str(wf_version.id),
+        workflow_id=wf_version.workflow_id,
+        version=wf_version.version,
+        nodes=wf_version.nodes,
+        edges=wf_version.edges,
+        settings=wf_version.settings,
+        created_by=wf_version.created_by
+    )
+
 
 @wf_router.post("/{wf_id}/execute", response_model=ExecutionResponse)
 async def execute_workflow(wf_id: str, exec_data: ExecutionCreate, request: Request):

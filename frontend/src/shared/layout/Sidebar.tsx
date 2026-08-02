@@ -56,11 +56,29 @@ export const Sidebar: React.FC = () => {
       <div className="pt-4 border-t border-black/40 flex items-center justify-between">
         <span className="text-[10px] text-muted-foreground font-mono">v1.0.0</span>
         <button
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          className="p-2.5 rounded-lg text-muted-foreground hover:text-foreground skeuo-btn"
-          title="Toggle Light/Dark Theme"
+          onClick={() => {
+            const nextTheme = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark';
+            setTheme(nextTheme);
+          }}
+          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground skeuo-btn flex items-center gap-1.5 transition-all"
+          title={`Current Theme: ${theme.toUpperCase()} (click to switch)`}
         >
-          {theme === 'dark' ? <Icons.Sun size={15} /> : <Icons.Moon size={15} />}
+          {theme === 'dark' ? (
+            <>
+              <Icons.Moon size={14} className="text-purple-400" />
+              <span>Dark</span>
+            </>
+          ) : theme === 'light' ? (
+            <>
+              <Icons.Sun size={14} className="text-amber-500" />
+              <span>Light</span>
+            </>
+          ) : (
+            <>
+              <Icons.Monitor size={14} className="text-blue-400" />
+              <span>Auto</span>
+            </>
+          )}
         </button>
       </div>
     </div>

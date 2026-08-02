@@ -9,3 +9,6 @@ python-dotenv
 pytest
 httpx
 temporalio
+mongomock-motor 
+pytest-asyncio 
+anyio

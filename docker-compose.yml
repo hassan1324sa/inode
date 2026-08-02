@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   backend:
@@ -15,6 +14,7 @@ services:
     depends_on:
       - mongodb
       - temporal
+    restart: on-failure
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   worker:
@@ -30,6 +30,7 @@ services:
     depends_on:
       - mongodb
       - temporal
+    restart: on-failure
     command: python -m app.core.execution.temporal_worker
 
   mongodb:
@@ -40,7 +41,8 @@ services:
       - mongo_data:/data/db
 
   temporal:
-    image: temporalio/dev:latest
+    image: temporalio/temporal:latest
+    command: server start-dev --ip 0.0.0.0
     ports:
       - "7233:7233"
       - "8233:8233"

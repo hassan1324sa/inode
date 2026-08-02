@@ -1,5 +1,22 @@
 from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
+from enum import Enum
+
+class ExecutionStatus(str, Enum):
+    COMPLETED = "Completed"
+    FAILED = "Failed"
+    RUNNING = "Running"
+    PENDING = "Pending"
+
+class ExecutionState(BaseModel):
+    status: ExecutionStatus = ExecutionStatus.RUNNING
+    step_index: int = 0
+    history: List[Dict[str, Any]] = Field(default_factory=list)
+
+class NodeExecutionResult(BaseModel):
+    status: ExecutionStatus = ExecutionStatus.COMPLETED
+    outputs: Dict[str, Any] = Field(default_factory=dict)
+    error: Optional[str] = None
 
 class ExecutionContext(BaseModel):
     """
@@ -27,3 +44,4 @@ class ExecutionContext(BaseModel):
 
     def set_node_output(self, node_id: str, output: Any):
         self.node_outputs[node_id] = output
+

@@ -26,18 +26,34 @@ class UserResponse(BaseModel):
     is_verified: bool
 
 class WorkflowCreate(BaseModel):
-    organization_id: str
-    name: str
+    organization_id: Optional[str] = "org-enterprise-01"
+    name: Optional[str] = "Untitled Workflow"
     description: Optional[str] = None
+    formatVersion: Optional[int] = 1
+    engineVersion: Optional[int] = 1
+    nodeRegistryVersion: Optional[int] = 1
+    workflowVersion: Optional[int] = 1
+    metadata: Optional[Dict[str, Any]] = None
+    variables: Optional[Dict[str, Any]] = None
+    nodes: Optional[List[Dict[str, Any]]] = None
+    edges: Optional[List[Dict[str, Any]]] = None
 
 class WorkflowResponse(BaseModel):
     id: str
-    organization_id: str
+    organization_id: str = "org-enterprise-01"
     name: str
-    description: Optional[str]
-    current_version: str
-    published_version: Optional[str]
-    status: str
+    description: Optional[str] = None
+    current_version: str = "v1"
+    published_version: Optional[str] = None
+    status: str = "Draft"
+    formatVersion: int = 1
+    engineVersion: int = 1
+    nodeRegistryVersion: int = 1
+    workflowVersion: int = 1
+    metadata: Optional[Dict[str, Any]] = None
+    variables: Optional[Dict[str, Any]] = {}
+    nodes: Optional[List[Dict[str, Any]]] = []
+    edges: Optional[List[Dict[str, Any]]] = []
 
 class ExecutionCreate(BaseModel):
     trigger_type: str = "Manual"
@@ -52,3 +68,18 @@ class ExecutionResponse(BaseModel):
     duration: Optional[float]
     trigger_type: str
     error: Optional[str] = None
+
+class VersionCreate(BaseModel):
+    nodes: List[Dict[str, Any]] = []
+    edges: List[Dict[str, Any]] = []
+    settings: Dict[str, Any] = {}
+
+class VersionResponse(BaseModel):
+    id: str
+    workflow_id: str
+    version: str
+    nodes: List[Dict[str, Any]]
+    edges: List[Dict[str, Any]]
+    settings: Dict[str, Any]
+    created_by: str
+

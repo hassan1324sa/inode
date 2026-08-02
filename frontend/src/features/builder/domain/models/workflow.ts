@@ -21,6 +21,7 @@ export interface WorkflowNode {
   version: Version;
   position: { x: number; y: number };
   data: Record<string, unknown>;
+  label?: string;
 }
 
 export interface WorkflowEdge {
@@ -29,6 +30,7 @@ export interface WorkflowEdge {
   target: NodeId;
   sourceHandle?: string;
   targetHandle?: string;
+  label?: string;
 }
 
 // Domain Event Contract

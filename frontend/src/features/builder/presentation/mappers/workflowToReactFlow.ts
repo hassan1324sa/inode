@@ -22,6 +22,7 @@ export function mapEdgeToReactFlow(edge: WorkflowEdge): RFEdge {
     target: edge.target,
     sourceHandle: edge.sourceHandle,
     targetHandle: edge.targetHandle,
+    label: edge.label,
     type: 'smoothstep',
     animated: true,
     style: { stroke: 'hsl(var(--primary))', strokeWidth: 3 },

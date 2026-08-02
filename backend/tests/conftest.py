@@ -18,7 +18,7 @@ def anyio_backend():
     return "asyncio"
 
 @pytest.fixture(scope="session", autouse=True)
-async def init_db():
+def init_db():
     # Setup mock Mongo Client
     client = AsyncMongoMockClient()
     client.append_metadata = None
@@ -31,11 +31,13 @@ async def init_db():
     db.list_collection_names = patched_list_collection_names
     
     # Initialize beanie with the mock database
-    await init_beanie(
-        database=db,
-        document_models=[
-            User, Organization, Workflow, WorkflowVersion, Execution, NodeExecution
-        ]
+    asyncio.run(
+        init_beanie(
+            database=db,
+            document_models=[
+                User, Organization, Workflow, WorkflowVersion, Execution, NodeExecution
+            ]
+        )
     )
     
     # Mock db_manager's connect_db and close_db so the app doesn't attempt real connections
@@ -52,7 +54,7 @@ async def init_db():
     yield
 
 @pytest.fixture(autouse=True)
-async def mock_execution_service():
+def mock_execution_service():
     mock_service = AsyncMock()
     mock_service.start_execution.return_value = "mock-run-id"
     mock_service.pause_execution.return_value = None
