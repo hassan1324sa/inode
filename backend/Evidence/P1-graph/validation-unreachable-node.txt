@@ -1,0 +1,36 @@
+Input Nodes:
+[
+  {
+    "id": "node-trigger",
+    "type": "manual_trigger"
+  },
+  {
+    "id": "node-ai",
+    "type": "ai_agent"
+  },
+  {
+    "id": "node-email",
+    "type": "send-email"
+  }
+]
+
+Input Edges:
+[
+  {
+    "source": "node-trigger",
+    "target": "node-ai",
+    "sourceHandle": "default",
+    "targetHandle": "default"
+  }
+]
+
+→ Validation rule: Reachability check
+→ Actual result:
+{
+  "statusCode": 400,
+  "code": "VALIDATION_ERROR",
+  "message": "{'message': 'Unreachable nodes detected', 'errors': [\"Node 'node-email' is unreachable from trigger 'node-trigger'.\"]}",
+  "detail": "{'message': 'Unreachable nodes detected', 'errors': [\"Node 'node-email' is unreachable from trigger 'node-trigger'.\"]}"
+}
+→ HTTP status: 400
+→ Temporal invocation = NO

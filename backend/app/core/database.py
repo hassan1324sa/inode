@@ -8,6 +8,16 @@ logger = logging.getLogger(__name__)
 class DatabaseManager:
     client: AsyncIOMotorClient = None
 
+    @property
+    def is_connected(self) -> bool:
+        return self.client is not None
+
+    @property
+    def db(self):
+        if self.client is None:
+            raise RuntimeError("Database not connected.")
+        return self.client[settings.db.database_name]
+
     @classmethod
     async def connect_db(cls, document_models: list = None):
         if document_models is None:

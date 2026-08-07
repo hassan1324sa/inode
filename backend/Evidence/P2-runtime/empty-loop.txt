@@ -1,0 +1,3 @@
+Items resolved: []
+Execution Trace: ['node-trigger']
+Empty loop finished gracefully without child activity invocations.

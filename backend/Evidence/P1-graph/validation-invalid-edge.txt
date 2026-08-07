@@ -1,0 +1,32 @@
+Input Nodes:
+[
+  {
+    "id": "node-trigger",
+    "type": "manual_trigger"
+  },
+  {
+    "id": "node-ai",
+    "type": "ai_agent"
+  }
+]
+
+Input Edges:
+[
+  {
+    "source": "node-trigger",
+    "target": "non-existent",
+    "sourceHandle": "default",
+    "targetHandle": "default"
+  }
+]
+
+→ Validation rule: Edge target existence check
+→ Actual result:
+{
+  "statusCode": 400,
+  "code": "VALIDATION_ERROR",
+  "message": "{'message': 'Edge existence or duplication failures', 'errors': [\"Edge target 'non-existent' does not exist.\"]}",
+  "detail": "{'message': 'Edge existence or duplication failures', 'errors': [\"Edge target 'non-existent' does not exist.\"]}"
+}
+→ HTTP status: 400
+→ Temporal invocation = NO

@@ -1,4 +1,5 @@
-from typing import Dict, Type, Optional
+from typing import Dict, Type, Optional, List
+from pydantic import BaseModel
 from app.core.nodes.base import BaseNode
 
 class NodeRegistry:
@@ -31,3 +32,65 @@ class NodeRegistry:
         Get all registered nodes.
         """
         return dict(cls._registry)
+
+
+class NodeContract(BaseModel):
+    node_type: str
+    input_handles: List[str] = ["default"]
+    output_handles: List[str] = ["default"]
+    is_trigger: bool = False
+
+
+class TriggerRegistry:
+    """
+    Registry for valid trigger types.
+    """
+    _triggers: List[str] = []
+
+    @classmethod
+    def register_trigger(cls, node_type: str):
+        if node_type not in cls._triggers:
+            cls._triggers.append(node_type)
+
+    @classmethod
+    def list_triggers(cls) -> List[str]:
+        return list(cls._triggers)
+
+    @classmethod
+    def is_trigger(cls, node_type: str) -> bool:
+        return node_type in cls._triggers
+
+
+class NodeContractRegistry:
+    """
+    The Single Source of Truth for valid inputs/outputs and trigger status.
+    """
+    _contracts: Dict[str, NodeContract] = {}
+
+    @classmethod
+    def register_contract(cls, contract: NodeContract):
+        cls._contracts[contract.node_type] = contract
+        if contract.is_trigger:
+            TriggerRegistry.register_trigger(contract.node_type)
+
+    @classmethod
+    def get_contract(cls, node_type: str) -> Optional[NodeContract]:
+        return cls._contracts.get(node_type)
+
+    @classmethod
+    def is_registered(cls, node_type: str) -> bool:
+        return node_type in cls._contracts
+
+
+# Initialize default Node Contracts
+NodeContractRegistry.register_contract(NodeContract(node_type="manual_trigger", input_handles=[], output_handles=["default"], is_trigger=True))
+NodeContractRegistry.register_contract(NodeContract(node_type="conditional", input_handles=["default"], output_handles=["true", "false"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="ai_agent", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="send-email", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="read-excel", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="file_storage", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="google_sheets", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="http_request", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="loop", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="set_variable", input_handles=["default"], output_handles=["default"]))
+

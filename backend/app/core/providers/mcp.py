@@ -11,6 +11,19 @@ class MCPToolSchema(BaseModel):
     description: str
     input_schema: Dict[str, Any] = Field(default_factory=dict)
 
+def redact_url(url: str) -> str:
+    from urllib.parse import urlparse, urlunparse
+    try:
+        parsed = urlparse(url)
+        if parsed.username or parsed.password:
+            netloc = parsed.hostname
+            if parsed.port:
+                netloc = f"{netloc}:{parsed.port}"
+            return urlunparse(parsed._replace(netloc=netloc))
+        return url
+    except Exception:
+        return "***"
+
 class MCPClientDriver:
     """
     Driver for interacting with an MCP (Model Context Protocol) server.
@@ -39,7 +52,8 @@ class MCPClientDriver:
 
     async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
         if tool_name not in self._tools:
-            raise ValueError(f"MCP tool '{tool_name}' not found on server {self.server_url}")
+            safe_url = redact_url(self.server_url)
+            raise ValueError(f"MCP tool '{tool_name}' not found on server {safe_url}")
         
         if self._tool_handler:
             return await self._tool_handler(tool_name, arguments)

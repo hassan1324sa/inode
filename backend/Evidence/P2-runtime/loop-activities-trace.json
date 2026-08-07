@@ -1,0 +1,62 @@
+{
+  "iterations": [
+    {
+      "index": 0,
+      "item": "Ahmed",
+      "activities": [
+        {
+          "activity_id": "execute_node_activity:loop-child-1",
+          "attempt": 1,
+          "status": "COMPLETED"
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "item": "Ali",
+      "activities": [
+        {
+          "activity_id": "execute_node_activity:loop-child-1",
+          "attempt": 1,
+          "status": "COMPLETED"
+        }
+      ]
+    }
+  ],
+  "total_activities_executed": 4,
+  "activity_log": [
+    {
+      "activity": "execute_node_activity:node-trigger",
+      "input": {
+        "id": "node-trigger",
+        "type": "manual_trigger"
+      },
+      "status": "COMPLETED",
+      "attempt": 1
+    },
+    {
+      "activity": "resolve_loop_items_activity",
+      "input": "loop-1",
+      "status": "COMPLETED",
+      "attempt": 1
+    },
+    {
+      "activity": "execute_node_activity:loop-child-1",
+      "input": {
+        "id": "loop-child-1",
+        "type": "ai_agent"
+      },
+      "status": "COMPLETED",
+      "attempt": 1
+    },
+    {
+      "activity": "execute_node_activity:loop-child-1",
+      "input": {
+        "id": "loop-child-1",
+        "type": "ai_agent"
+      },
+      "status": "COMPLETED",
+      "attempt": 1
+    }
+  ]
+}

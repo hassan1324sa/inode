@@ -17,15 +17,42 @@ spec:
         app.kubernetes.io/name: fluxa
         app.kubernetes.io/component: worker
     spec:
+      serviceAccountName: {{ .Release.Name }}-worker-sa
+      securityContext:
+        {{- toYaml .Values.securityContext.pod | nindent 8 }}
       containers:
         - name: fluxa-worker
           image: "{{ .Values.worker.image.repository }}:{{ .Values.worker.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext.container | nindent 12 }}
           envFrom:
             - configMapRef:
                 name: {{ .Release.Name }}-config
           env:
             - name: WORKER_CONCURRENCY
               value: "{{ .Values.worker.concurrency }}"
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -m
+                - app.worker_health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            exec:
+              command:
+                - python
+                - -m
+                - app.worker_health
+            initialDelaySeconds: 10
+            periodSeconds: 10
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- toYaml .Values.resources.worker | nindent 12 }}
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}

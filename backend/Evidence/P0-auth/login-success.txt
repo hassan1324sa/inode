@@ -1,0 +1,12 @@
+POST /api/v1/auth/login
+Payload: {
+  "email": "auditor@fluxa.ai",
+  "password": "supersecurepassword123"
+}
+
+Response Status: 200
+Response Body:
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2YTc0ZTMwMjdlYTdkYWQwYzc0NWIzN2MiLCJvcmdfaWQiOiI2YTYzZTE0MDU0NmQ5YjAzMzRkYmEzNzYiLCJ3c19pZCI6ImRlZmF1bHQtdyIsImVudl9pZCI6ImRlZmF1bHQtZSIsInByb2pfaWQiOiJkZWZhdWx0LXAiLCJpYXQiOjE3ODYwNDUxODYsImV4cCI6MTc4NjA0Njk4NiwianRpIjoiOGJkZDVmMmItYTAyOC00ZTMxLThmN2EtNjcyZjUyMTJjYzkyIn0.ytkgyFLJsuee08vPKAH4hgL7gpAyiSDYBvoijw3m_-M",
+  "token_type": "bearer"
+}

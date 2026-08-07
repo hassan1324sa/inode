@@ -1,0 +1,13 @@
+WebSocket Handshake Authentication Proof
+---------------------------------------
+Test Case 1: WS Connection without Token
+URL: ws://localhost/api/v1/debug/ws?execution_id=ex-1&tenant_id=t-1
+Result: Connection Rejected immediately (Close Code: 1008)
+
+Test Case 2: WS Connection with Invalid Token
+URL: ws://localhost/api/v1/debug/ws?execution_id=ex-1&tenant_id=t-1&token=invalid_token
+Result: Connection Rejected immediately (Close Code: 1008)
+
+Test Case 3: WS Connection with Mismatched Tenant ID
+URL: ws://localhost/api/v1/debug/ws?execution_id=ex-1&tenant_id=t-1&token=<valid_token_for_tenant_2>
+Result: Connection Rejected immediately (Close Code: 1008)

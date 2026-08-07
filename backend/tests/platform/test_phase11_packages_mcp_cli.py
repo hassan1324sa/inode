@@ -14,6 +14,8 @@ from app.core.registry.provider_registry import ProviderRegistry
 
 @pytest.fixture(autouse=True)
 def clean_marketplace():
+    import os
+    os.environ["FLUXA_SYSTEM_BOOTSTRAP"] = "true"
     PackageMarketplace.clear()
     ProviderRegistry.clear()
     yield

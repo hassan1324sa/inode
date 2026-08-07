@@ -28,9 +28,31 @@ env:
   TEMPORAL_HOST: "temporal-frontend.temporal.svc.cluster.local:7233"
 
 resources:
-  limits:
-    cpu: 1000m
-    memory: 1024Mi
-  requests:
-    cpu: 250m
-    memory: 256Mi
+  api:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  worker:
+    limits:
+      cpu: 2000m
+      memory: 2048Mi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+
+securityContext:
+  pod:
+    runAsNonRoot: true
+    runAsUser: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  container:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL

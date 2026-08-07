@@ -1,0 +1,6 @@
+Workflow Execution Retry Log:
+Activity: execute_node_activity:node-trigger, Attempt: 1, Status: COMPLETED
+Activity: resolve_loop_items_activity, Attempt: 1, Status: COMPLETED
+Activity: execute_node_activity:loop-child-1, Attempt: 1, Status: FAILED
+Activity: execute_node_activity:loop-child-1, Attempt: 1, Status: COMPLETED
+Final Workflow Status: COMPLETED

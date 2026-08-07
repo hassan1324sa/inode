@@ -42,6 +42,7 @@ export interface NodePlugin {
     streaming: boolean;
     retryable: boolean;
     credentialRequired: boolean;
+    supports_agent_tool?: boolean;
   };
 
   schema: NodeSchema;

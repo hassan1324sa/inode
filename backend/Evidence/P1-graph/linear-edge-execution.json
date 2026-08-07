@@ -1,0 +1,26 @@
+{
+  "nodes_input_order": [
+    "node-trigger",
+    "node-b",
+    "node-c"
+  ],
+  "edges": [
+    {
+      "source": "node-trigger",
+      "target": "node-b",
+      "sourceHandle": "default",
+      "targetHandle": "default"
+    },
+    {
+      "source": "node-b",
+      "target": "node-c",
+      "sourceHandle": "default",
+      "targetHandle": "default"
+    }
+  ],
+  "actual_execution_trace": [
+    "node-trigger",
+    "node-b",
+    "node-c"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "status": "max_iterations",
+  "iterations": 1,
+  "cost": 0.0005,
+  "plan": {
+    "steps": [
+      {
+        "step_id": "d02676bc-fa6d-4c3f-9bc0-e0f7a50aed3d",
+        "tool_name": "sum_tool",
+        "args": {
+          "a": 10,
+          "b": 20
+        },
+        "thought": "Thinking...",
+        "status": "FAILED",
+        "result": null,
+        "error": "object int can't be used in 'await' expression"
+      }
+    ],
+    "is_completed": false,
+    "final_answer": null
+  },
+  "final_answer": null
+}

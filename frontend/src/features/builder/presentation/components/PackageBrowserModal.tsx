@@ -12,72 +12,60 @@ interface PackageItem {
   category: string;
 }
 
-const INITIAL_PACKAGES: PackageItem[] = [
-  {
-    id: 'pkg-core-ext',
-    name: '@fluxa/core-extensions',
-    version: '1.2.0',
-    author: 'Fluxa Official',
-    description: 'Extended logic nodes including Regex matching, Date formatting, and UUID generators.',
-    installed: true,
-    category: 'Utilities',
-  },
-  {
-    id: 'pkg-openai-vision',
-    name: '@fluxa/openai-vision',
-    version: '2.0.1',
-    author: 'AI Community',
-    description: 'Vision-capable image analysis and OCR nodes for OpenAI GPT-4o.',
-    installed: false,
-    category: 'AI',
-  },
-  {
-    id: 'pkg-salesforce',
-    name: '@fluxa/salesforce-crm',
-    version: '1.0.4',
-    author: 'Enterprise Team',
-    description: 'Connectors for Salesforce CRM accounts, leads, and opportunity triggers.',
-    installed: false,
-    category: 'Communication',
-  },
-  {
-    id: 'pkg-aws-s3',
-    name: '@fluxa/aws-s3',
-    version: '1.1.0',
-    author: 'CloudOps',
-    description: 'Upload, download, and stream buckets directly from AWS S3 compatible storage.',
-    installed: true,
-    category: 'Files',
-  },
-];
-
 interface PackageBrowserModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
 export const PackageBrowserModal: React.FC<PackageBrowserModalProps> = ({ isOpen, onClose }) => {
-  const [packages, setPackages] = useState<PackageItem[]>(INITIAL_PACKAGES);
+  const [packages, setPackages] = useState<PackageItem[]>([]);
+  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'installed'>('all');
   const { showToast } = useToast();
 
+  const fetchPackages = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/v1/packages/');
+      if (!res.ok) throw new Error('Failed to load packages');
+      const data = await res.json();
+      setPackages(data);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to load packages', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      fetchPackages();
+    }
+  }, [isOpen, fetchPackages]);
+
   if (!isOpen) return null;
 
-  const handleToggleInstall = (id: string) => {
-    setPackages((prev) =>
-      prev.map((pkg) => {
-        if (pkg.id === id) {
-          const nextState = !pkg.installed;
-          showToast(
-            nextState ? `Installed package ${pkg.name}` : `Removed package ${pkg.name}`,
-            nextState ? 'success' : 'info'
-          );
-          return { ...pkg, installed: nextState };
-        }
-        return pkg;
-      })
-    );
+  const handleToggleInstall = async (name: string, currentlyInstalled: boolean) => {
+    const endpoint = currentlyInstalled ? '/api/v1/packages/uninstall' : '/api/v1/packages/install';
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ package_name: name })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Operation failed');
+      }
+      showToast(
+        currentlyInstalled ? `Removed package ${name}` : `Installed package ${name}`,
+        currentlyInstalled ? 'info' : 'success'
+      );
+      fetchPackages();
+    } catch (err: any) {
+      showToast(err.message || 'Operation failed', 'error');
+    }
   };
 
   const filtered = packages.filter((pkg) => {
@@ -147,7 +135,13 @@ export const PackageBrowserModal: React.FC<PackageBrowserModalProps> = ({ isOpen
         </div>
 
         {/* Package List */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 relative min-h-[200px]">
+          {loading && (
+            <div className="absolute inset-0 bg-card/65 backdrop-blur-sm z-10 flex items-center justify-center text-xs text-muted-foreground">
+              <Icons.Loader className="animate-spin text-primary mr-2" size={16} />
+              Synchronizing packages...
+            </div>
+          )}
           {filtered.map((pkg) => (
             <div
               key={pkg.id}
@@ -168,7 +162,8 @@ export const PackageBrowserModal: React.FC<PackageBrowserModalProps> = ({ isOpen
               </div>
 
               <button
-                onClick={() => handleToggleInstall(pkg.id)}
+                onClick={() => handleToggleInstall(pkg.name, pkg.installed)}
+                disabled={loading}
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 border ${
                   pkg.installed
                     ? 'bg-secondary text-foreground border-border hover:bg-destructive hover:text-white hover:border-destructive'
@@ -180,7 +175,7 @@ export const PackageBrowserModal: React.FC<PackageBrowserModalProps> = ({ isOpen
             </div>
           ))}
 
-          {filtered.length === 0 && (
+          {filtered.length === 0 && !loading && (
             <div className="text-center py-12 text-muted-foreground text-xs">
               No packages found matching your criteria.
             </div>

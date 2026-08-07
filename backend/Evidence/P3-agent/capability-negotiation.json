@@ -1,0 +1,40 @@
+{
+  "Discover": {
+    "tool": "sum_tool",
+    "status": "FOUND"
+  },
+  "ValidateSchema": {
+    "input": {
+      "a": 10,
+      "b": 20
+    },
+    "status": "PASSED"
+  },
+  "Authorization": {
+    "required_permissions": [
+      "math:calc"
+    ],
+    "granted_permissions": [
+      "math:calc"
+    ],
+    "status": "AUTHORIZED"
+  },
+  "TenantScope": {
+    "tenant_id": "tenant-1",
+    "status": "SCOPED"
+  },
+  "CostPolicyCheck": {
+    "cost_estimate": 0.0,
+    "max_cost": 10.0,
+    "status": "APPROVED"
+  },
+  "IdempotencyCheck": {
+    "execution_id": "session-p3-reasoning-loop-1",
+    "status": "BYPASS_CACHE_ON_NEW_RUN"
+  },
+  "Execute": {
+    "handler": "NativeTool",
+    "output": 30,
+    "status": "SUCCESS"
+  }
+}

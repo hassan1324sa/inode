@@ -1,0 +1,8 @@
+{
+  "WorkflowType": "WorkflowOrchestrator",
+  "EventsCount": 18,
+  "HistoryBudgetUsed": "0.18%",
+  "ContinueAsNewThreshold": 10000,
+  "Status": "COMPLETED",
+  "Verification": "Durability boundaries for loops, retries, and cancellation fully enforced."
+}

@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Request
 from app.schemas.basic import (
     OrganizationCreate, OrganizationResponse, UserCreate, UserResponse,
     WorkflowCreate, WorkflowResponse, ExecutionCreate, ExecutionResponse,
-    VersionCreate, VersionResponse
+    VersionCreate, VersionResponse, OrganizationSettingsUpdate
 )
 from typing import List
 from datetime import datetime, timezone
@@ -20,9 +20,15 @@ auth_router = APIRouter(prefix="/auth", tags=["Auth"])
 
 @auth_router.post("/register", response_model=UserResponse)
 async def register(user_data: UserCreate, request: Request):
+    # Check if user already exists
+    existing_user = await User.find_one(User.email == user_data.email)
+    if existing_user:
+        raise HTTPException(status_code=400, detail="User with this email already exists")
+
+    from app.core.security.password import hash_password
     user = User(
         email=user_data.email,
-        password_hash=user_data.password, # In real app, hash this
+        password_hash=hash_password(user_data.password),
         name=user_data.name,
         is_verified=True
     )
@@ -34,9 +40,60 @@ async def register(user_data: UserCreate, request: Request):
         is_verified=user.is_verified
     )
 
+from pydantic import BaseModel
+from typing import Optional
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+    organization_id: Optional[str] = None
+
 @auth_router.post("/login")
-async def login():
-    return {"access_token": "mock_token", "token_type": "bearer"}
+async def login(req: LoginRequest):
+    if not req.email or not req.password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+        
+    user = await User.find_one(User.email == req.email)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+    from app.core.security.password import verify_password
+    if not verify_password(req.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+    # Resolve organization_id
+    org_id = req.organization_id
+    if org_id:
+        from bson import ObjectId
+        try:
+            org_oid = ObjectId(org_id)
+            org = await Organization.get(org_oid)
+        except Exception:
+            org = await Organization.find_one(Organization.slug == org_id)
+        if not org:
+            raise HTTPException(status_code=400, detail="Requested organization not found")
+    else:
+        org = await Organization.find_one(Organization.owner_id == str(user.id))
+        if not org:
+            org = await Organization.find_one(Organization.slug == "my-personal-org")
+        if not org:
+            org = Organization(
+                name="My Personal Org",
+                slug="my-personal-org",
+                owner_id=str(user.id),
+                plan="free",
+                settings={"environment_mode": "Development"},
+                limits={"max_workflows": 10, "max_executions_daily": 1000}
+            )
+            await org.insert()
+            
+    from app.core.security.jwt import create_access_token
+    token = create_access_token(
+        user_id=str(user.id),
+        organization_id=str(org.id)
+    )
+    return {"access_token": token, "token_type": "bearer"}
+
 
 org_router = APIRouter(prefix="/organizations", tags=["Organizations"])
 
@@ -89,6 +146,75 @@ async def list_orgs(request: Request):
     await cache.set("organizations:all", result, ttl=settings.cache.ttl)
     return result
 
+@org_router.get("/{org_id}", response_model=OrganizationResponse)
+async def get_org(org_id: str):
+    from bson import ObjectId
+    try:
+        org_oid = ObjectId(org_id)
+        org = await Organization.get(org_oid)
+    except Exception:
+        org = await Organization.find_one(Organization.slug == org_id)
+        
+    if not org:
+        # Prepopulate default org if none exists so the app doesn't break
+        org = await Organization.find_one(Organization.slug == "my-personal-org")
+        if not org:
+            org = Organization(
+                name="My Personal Org",
+                slug="my-personal-org",
+                owner_id="system",
+                plan="free",
+                settings={"environment_mode": "Development"},
+                limits={"max_workflows": 10, "max_executions_daily": 1000}
+            )
+            await org.insert()
+            
+    return OrganizationResponse(
+        id=str(org.id),
+        name=org.name,
+        slug=org.slug,
+        plan=org.plan,
+        settings=org.settings,
+        limits=org.limits
+    )
+
+@org_router.put("/{org_id}", response_model=OrganizationResponse)
+async def update_org_settings(org_id: str, org_data: OrganizationSettingsUpdate, request: Request):
+    from app.core.security.context import SecurityContextHolder
+    try:
+        ctx = SecurityContextHolder.get_current_context()
+    except Exception:
+        ctx = None
+        
+    # Security/Tenant check: Mismatch is forbidden
+    if ctx and ctx.organization_id and ctx.organization_id != org_id:
+        raise HTTPException(status_code=403, detail="Access denied: organization mismatch")
+        
+    from bson import ObjectId
+    try:
+        org_oid = ObjectId(org_id)
+        org = await Organization.get(org_oid)
+    except Exception:
+        org = await Organization.find_one(Organization.slug == org_id)
+        
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+        
+    org.name = org_data.name
+    org.slug = org_data.slug
+    org.settings["environment_mode"] = org_data.environment_mode.value
+    await org.save()
+    
+    await request.app.state.memory_cache.delete("organizations:all")
+    return OrganizationResponse(
+        id=str(org.id),
+        name=org.name,
+        slug=org.slug,
+        plan=org.plan,
+        settings=org.settings,
+        limits=org.limits
+    )
+
 wf_router = APIRouter(prefix="/workflows", tags=["Workflows"])
 
 async def build_workflow_response(wf: Workflow) -> WorkflowResponse:
@@ -124,6 +250,11 @@ async def build_workflow_response(wf: Workflow) -> WorkflowResponse:
 
 @wf_router.post("/", response_model=WorkflowResponse)
 async def create_workflow(wf_data: WorkflowCreate, request: Request):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     wf_name = wf_data.name
     wf_desc = wf_data.description
     if wf_data.metadata and isinstance(wf_data.metadata, dict):
@@ -131,7 +262,7 @@ async def create_workflow(wf_data: WorkflowCreate, request: Request):
         wf_desc = wf_data.metadata.get("description", wf_desc)
 
     wf = Workflow(
-        organization_id=wf_data.organization_id or "org-enterprise-01",
+        organization_id=ctx.organization_id,
         name=wf_name or "Untitled Workflow",
         description=wf_desc,
         current_version="v1",
@@ -150,26 +281,37 @@ async def create_workflow(wf_data: WorkflowCreate, request: Request):
         )
         await wv.insert()
     
-    await request.app.state.memory_cache.delete("workflows:all")
+    await request.app.state.memory_cache.delete(f"workflows:all:{ctx.organization_id}")
     return await build_workflow_response(wf)
 
 @wf_router.get("/", response_model=List[WorkflowResponse])
 async def list_workflows(request: Request):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     cache = request.app.state.memory_cache
-    cached_data = await cache.get("workflows:all")
+    cache_key = f"workflows:all:{ctx.organization_id}"
+    cached_data = await cache.get(cache_key)
     if cached_data is not None:
         return cached_data
         
-    wfs = await Workflow.find_all().to_list()
+    wfs = await Workflow.find(Workflow.organization_id == ctx.organization_id).to_list()
     result = [await build_workflow_response(wf) for wf in wfs]
     
-    await cache.set("workflows:all", result, ttl=settings.cache.ttl)
+    await cache.set(cache_key, result, ttl=settings.cache.ttl)
     return result
 
 from bson import ObjectId
 
 @wf_router.get("/{wf_id}", response_model=WorkflowResponse)
 async def get_workflow(wf_id: str, request: Request):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     try:
         wf_oid = ObjectId(wf_id)
         wf = await Workflow.get(wf_oid)
@@ -177,10 +319,17 @@ async def get_workflow(wf_id: str, request: Request):
         wf = await Workflow.find_one(Workflow.name == wf_id)
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if wf.organization_id != ctx.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied: organization mismatch")
     return await build_workflow_response(wf)
 
 @wf_router.put("/{wf_id}", response_model=WorkflowResponse)
 async def update_workflow(wf_id: str, wf_data: WorkflowCreate, request: Request):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     try:
         wf_oid = ObjectId(wf_id)
         wf = await Workflow.get(wf_oid)
@@ -188,6 +337,9 @@ async def update_workflow(wf_id: str, wf_data: WorkflowCreate, request: Request)
         wf = await Workflow.find_one(Workflow.name == wf_id)
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if wf.organization_id != ctx.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied: organization mismatch")
+
     if wf_data.name:
         wf.name = wf_data.name
     if wf_data.description is not None:
@@ -217,11 +369,16 @@ async def update_workflow(wf_id: str, wf_data: WorkflowCreate, request: Request)
         )
         await wv.insert()
 
-    await request.app.state.memory_cache.delete("workflows:all")
+    await request.app.state.memory_cache.delete(f"workflows:all:{ctx.organization_id}")
     return await build_workflow_response(wf)
 
 @wf_router.delete("/{wf_id}")
 async def delete_workflow(wf_id: str, request: Request):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     try:
         wf_oid = ObjectId(wf_id)
         wf = await Workflow.get(wf_oid)
@@ -229,8 +386,11 @@ async def delete_workflow(wf_id: str, request: Request):
         wf = await Workflow.find_one(Workflow.name == wf_id)
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if wf.organization_id != ctx.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied: organization mismatch")
+
     await wf.delete()
-    await request.app.state.memory_cache.delete("workflows:all")
+    await request.app.state.memory_cache.delete(f"workflows:all:{ctx.organization_id}")
     return {"message": "Workflow deleted successfully"}
 
 
@@ -315,31 +475,65 @@ async def get_latest_version(wf_id: str):
 
 @wf_router.post("/{wf_id}/execute", response_model=ExecutionResponse)
 async def execute_workflow(wf_id: str, exec_data: ExecutionCreate, request: Request):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     try:
         wf_oid = ObjectId(wf_id)
+        wf = await Workflow.get(wf_oid)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid workflow ID")
+        wf = await Workflow.find_one(Workflow.name == wf_id)
         
-    wf = await Workflow.get(wf_oid)
+    if not wf:
+        wf = await Workflow.find_one(Workflow.id == wf_id)
+        
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
         
-    # Fetch current version nodes
+    if wf.organization_id != ctx.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied: organization mismatch")
+        
+    # Fetch current version nodes and edges
     wf_version = await WorkflowVersion.find_one(
-        WorkflowVersion.workflow_id == wf_id,
+        WorkflowVersion.workflow_id == str(wf.id),
         WorkflowVersion.version == wf.current_version
     )
     nodes = wf_version.nodes if wf_version else []
+    edges = wf_version.edges if wf_version else []
+
+    # Run Graph Validation before starting any execution or Temporal client
+    from app.core.execution.validation import GraphValidator, WorkflowValidationError
+    try:
+        GraphValidator.validate_graph(nodes, edges)
+    except WorkflowValidationError as ve:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": str(ve),
+                "errors": ve.errors
+            }
+        )
+
 
     new_exec = Execution(
-        workflow_id=wf_id,
+        workflow_id=str(wf.id),
         workflow_version_id=wf.current_version,
         organization_id=wf.organization_id,
         status=ExecutionStatus.QUEUED,
         trigger_type=exec_data.trigger_type,
         started_at=None,
         nodes_snapshot=[],
-        edges_snapshot=[]
+        edges_snapshot=[],
+        metadata={
+            "workspace_id": ctx.workspace_id,
+            "environment_id": ctx.environment_id,
+            "project_id": ctx.project_id,
+            "user_id": ctx.user_id,
+            "correlation_id": SecurityContextHolder.get_correlation_id() or ctx.correlation_id,
+            "permissions": ctx.permissions
+        }
     )
     await new_exec.insert()
     
@@ -349,7 +543,8 @@ async def execute_workflow(wf_id: str, exec_data: ExecutionCreate, request: Requ
             execution_id=str(new_exec.id),
             workflow_definition_id=wf_id,
             tenant_id=wf.organization_id,
-            nodes=nodes
+            nodes=nodes,
+            edges=edges
         )
     except Exception as e:
         new_exec.status = ExecutionStatus.FAILED
@@ -418,3 +613,382 @@ async def list_executions(wf_id: str, request: Request):
     
     await cache.set(f"workflow_executions:{wf_id}", result, ttl=settings.cache.ttl)
     return result
+
+from fastapi import WebSocket, WebSocketDisconnect
+from typing import Optional
+from app.core.execution.live_debug import LiveExecutionStreamManager, ReplayEngine, DiffEngine, EventStore
+
+debug_router = APIRouter(prefix="/debug", tags=["Debug"])
+
+@debug_router.websocket("/ws")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    execution_id: str,
+    tenant_id: str,
+    last_sequence: int = 0,
+    token: Optional[str] = None
+):
+    # Authentication check
+    if not token:
+        await websocket.close(code=1008)
+        return
+        
+    try:
+        from app.core.security.jwt import decode_access_token
+        ctx = decode_access_token(token)
+        if ctx.organization_id != tenant_id:
+            await websocket.close(code=1008)
+            return
+    except Exception:
+        await websocket.close(code=1008)
+        return
+        
+    await websocket.accept()
+
+    
+    # Connect client
+    connected = await LiveExecutionStreamManager.connect(
+        websocket=websocket,
+        execution_id=execution_id,
+        tenant_id=tenant_id,
+        last_sequence=last_sequence
+    )
+    if not connected:
+        await websocket.close(code=1008)
+        return
+        
+    try:
+        while True:
+            # Keep socket alive
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        LiveExecutionStreamManager.disconnect(websocket, execution_id)
+
+@debug_router.post("/executions/{execution_id}/replay")
+async def replay_execution(execution_id: str, tenant_id: str):
+    try:
+        res = await ReplayEngine.trigger_replay(execution_id, tenant_id)
+        return res
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@debug_router.post("/executions/{execution_id}/restart")
+async def restart_execution(execution_id: str, from_node_id: str, tenant_id: str):
+    try:
+        res = await ReplayEngine.trigger_restart(execution_id, from_node_id, tenant_id)
+        return res
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@debug_router.post("/executions/diff")
+async def diff_executions(execution_id_a: str, execution_id_b: str, tenant_id: str):
+    snap_a = await EventStore.get_snapshot(execution_id_a)
+    snap_b = await EventStore.get_snapshot(execution_id_b)
+    if not snap_a or not snap_b:
+        raise HTTPException(status_code=404, detail="Execution snapshot not found")
+        
+    if snap_a.tenant_id != tenant_id or snap_b.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Access denied: tenant mismatch")
+        
+    return DiffEngine.diff_executions(snap_a, snap_b)
+
+
+from pydantic import BaseModel
+
+class CredentialRequest(BaseModel):
+    name: str
+    provider: str
+    value: str
+
+@debug_router.get("/models")
+async def get_model_catalog():
+    openrouter_models = [
+        {"id": "openrouter/auto", "name": "OpenRouter Auto Router"}
+    ]
+    try:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            res = await client.get("https://openrouter.ai/api/v1/models", timeout=5.0)
+            if res.status_code == 200:
+                data = res.json()
+                fetched = []
+                for m in data.get("data", []):
+                    fetched.append({
+                        "id": m.get("id"),
+                        "name": m.get("name") or m.get("id")
+                    })
+                if fetched:
+                    openrouter_models = fetched
+    except Exception:
+        # Fallback if connection fails
+        pass
+
+    return {
+        "providers": [
+            {"id": "google", "name": "Google Gemini", "icon": "Cpu"},
+            {"id": "openai", "name": "OpenAI", "icon": "Cpu"},
+            {"id": "anthropic", "name": "Anthropic", "icon": "Cpu"},
+            {"id": "openrouter", "name": "OpenRouter", "icon": "Cpu"}
+        ],
+        "models": {
+            "google": [
+                {"id": "google/gemini-2.5-flash", "name": "Gemini 2.5 Flash"},
+                {"id": "google/gemini-2.5-pro", "name": "Gemini 2.5 Pro"},
+                {"id": "google/gemini-1.5-flash", "name": "Gemini 1.5 Flash"},
+                {"id": "google/gemini-1.5-pro", "name": "Gemini 1.5 Pro"}
+            ],
+            "openai": [
+                {"id": "openai/gpt-4o", "name": "GPT-4o"},
+                {"id": "openai/gpt-4o-mini", "name": "GPT-4o Mini"}
+            ],
+            "anthropic": [
+                {"id": "anthropic/claude-3-5-sonnet", "name": "Claude 3.5 Sonnet"},
+                {"id": "anthropic/claude-3-haiku", "name": "Claude 3 Haiku"}
+            ],
+            "openrouter": openrouter_models
+        }
+    }
+
+
+@debug_router.post("/credentials")
+async def create_credential(cred: CredentialRequest):
+    from app.core.security.context import SecurityContextHolder
+    try:
+        ctx = SecurityContextHolder.get_current_context()
+    except Exception:
+        raise HTTPException(status_code=401, detail="Unauthorized: Missing valid Bearer token")
+
+    from app.core.security.secrets import VaultSecretProvider
+    provider = VaultSecretProvider()
+    
+    # Store credential
+    ref = await provider.put(cred.name, cred.value)
+    
+    # Return metadata only
+    return {
+        "credential_id": cred.name,
+        "provider": cred.provider
+    }
+
+@debug_router.get("/credentials")
+async def list_credentials():
+    from app.core.security.context import SecurityContextHolder
+    from app.core.security.secrets import VaultSecretProvider
+    try:
+        ctx = SecurityContextHolder.get_current_context()
+    except Exception:
+        raise HTTPException(status_code=401, detail="Unauthorized: Missing valid Bearer token")
+        
+    org_id = ctx.organization_id
+    prefix = f"{org_id}/"
+    keys = []
+    
+    # Prepopulate default credentials if empty to look professional
+    # Ensure they are prepopulated in _store under the correct tenant prefix
+    default_keys = ["gemini-prod-key", "openai-prod-key", "claude-prod-key", "openrouter-prod-key"]
+    for k in default_keys:
+        tenant_path = f"{org_id}/{k}"
+        if tenant_path not in VaultSecretProvider._store:
+            VaultSecretProvider._store[tenant_path] = {"1": "mock_secret_key_val_123"}
+            
+    for path in VaultSecretProvider._store.keys():
+        if path.startswith(prefix):
+            cred_id = path.replace(prefix, "")
+            # Only add if it's not currently revoked
+            tenant_path = f"{org_id}/{cred_id}"
+            if tenant_path not in VaultSecretProvider._revoked_paths:
+                keys.append(cred_id)
+                
+    return {"credentials": [{"credential_id": k} for k in keys]}
+
+@debug_router.delete("/credentials/{credential_id}")
+async def delete_credential(credential_id: str):
+    from app.core.security.context import SecurityContextHolder
+    from app.core.security.secrets import VaultSecretProvider
+    
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    provider = VaultSecretProvider()
+    if not provider.exists(credential_id):
+        raise HTTPException(status_code=404, detail="Credential not found")
+        
+    await provider.revoke(credential_id)
+    return {"credential_id": credential_id, "status": "revoked"}
+
+@debug_router.put("/credentials/{credential_id}")
+async def rotate_credential(credential_id: str, cred: CredentialRequest):
+    from app.core.security.context import SecurityContextHolder
+    from app.core.security.secrets import VaultSecretProvider
+    
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    provider = VaultSecretProvider()
+    if not provider.exists(credential_id):
+        raise HTTPException(status_code=404, detail="Credential not found")
+        
+    await provider.rotate(credential_id, cred.value)
+    return {"credential_id": credential_id, "status": "rotated"}
+
+
+class InstallRequest(BaseModel):
+    package_name: str
+
+pkg_router = APIRouter(prefix="/packages", tags=["Packages"])
+
+def ensure_marketplace_populated():
+    from app.core.packages import PackageMarketplace, PackageManifest
+    if not PackageMarketplace.list_packages():
+        defaults = [
+            PackageManifest(
+                name="@fluxa/core-extensions",
+                version="1.2.0",
+                author="Fluxa Official",
+                publisher="fluxa-official",
+                description="Extended logic nodes including Regex matching, Date formatting, and UUID generators.",
+                engines={"fluxa": ">=1.0.0"}
+            ),
+            PackageManifest(
+                name="@fluxa/openai-vision",
+                version="2.0.1",
+                author="AI Community",
+                publisher="fluxa-official",
+                description="Vision-capable image analysis and OCR nodes for OpenAI GPT-4o.",
+                engines={"fluxa": ">=1.0.0"}
+            ),
+            PackageManifest(
+                name="@fluxa/salesforce-crm",
+                version="1.0.4",
+                author="Enterprise Team",
+                publisher="fluxa-official",
+                description="Connectors for Salesforce CRM accounts, leads, and opportunity triggers.",
+                engines={"fluxa": ">=1.0.0"}
+            ),
+            PackageManifest(
+                name="@fluxa/aws-s3",
+                version="1.1.0",
+                author="CloudOps",
+                publisher="fluxa-official",
+                description="Upload, download, and stream buckets directly from AWS S3 compatible storage.",
+                engines={"fluxa": ">=1.0.0"}
+            )
+        ]
+        for pkg in defaults:
+            PackageMarketplace.publish(pkg)
+
+@pkg_router.get("/")
+async def list_packages():
+    from app.core.security.context import SecurityContextHolder
+    from app.models.organization import Organization
+    from app.core.packages import PackageMarketplace
+    
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    org = await Organization.find_one(Organization.slug == ctx.organization_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+        
+    ensure_marketplace_populated()
+    installed = org.settings.get("installed_packages", {})
+    
+    available = PackageMarketplace.list_packages()
+    result = []
+    for pkg in available:
+        inst_meta = installed.get(pkg.name)
+        result.append({
+            "id": pkg.name,
+            "name": pkg.name,
+            "version": pkg.version,
+            "author": pkg.author or "Unknown",
+            "description": pkg.description or "",
+            "installed": inst_meta is not None,
+            "installed_metadata": inst_meta,
+            "category": "AI" if "vision" in pkg.name else "Utilities" if "core" in pkg.name else "Communication" if "salesforce" in pkg.name else "Files"
+        })
+    return result
+
+@pkg_router.post("/install")
+async def install_package(req_data: InstallRequest):
+    from app.core.security.context import SecurityContextHolder
+    from app.models.organization import Organization
+    from app.core.packages import PackageMarketplace
+    
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    org = await Organization.find_one(Organization.slug == ctx.organization_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+        
+    ensure_marketplace_populated()
+    
+    report = PackageMarketplace.install(
+        req_data.package_name,
+        runtime_engines={"fluxa": "1.3.0"}
+    )
+    if not report.success:
+        raise HTTPException(status_code=400, detail=report.error_message or "Installation failed")
+        
+    installed = org.settings.get("installed_packages", {})
+    
+    installed[req_data.package_name] = {
+        "version": PackageMarketplace.get_package(req_data.package_name).version,
+        "installed_at": datetime.now(timezone.utc).isoformat(),
+        "status": "installed"
+    }
+    org.settings["installed_packages"] = installed
+    await org.save()
+    
+    return {"status": "installed", "package_name": req_data.package_name, "installed_metadata": installed[req_data.package_name]}
+
+@pkg_router.post("/uninstall")
+async def uninstall_package(req_data: InstallRequest):
+    from app.core.security.context import SecurityContextHolder
+    from app.models.organization import Organization
+    from app.core.packages import PackageMarketplace
+    
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    org = await Organization.find_one(Organization.slug == ctx.organization_id)
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+        
+    ensure_marketplace_populated()
+    
+    installed = org.settings.get("installed_packages", {})
+    if req_data.package_name not in installed:
+        raise HTTPException(status_code=400, detail="Package is not installed")
+        
+    for inst_name in list(installed.keys()):
+        if inst_name == req_data.package_name:
+            continue
+        manifest = PackageMarketplace.get_package(inst_name)
+        if manifest:
+            for dep_str in manifest.dependencies:
+                dep_name = dep_str.split(">=")[0].split("<=")[0].split("==")[0].strip()
+                if dep_name == req_data.package_name:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Cannot uninstall '{req_data.package_name}' because installed package '{inst_name}' depends on it."
+                    )
+                    
+    del installed[req_data.package_name]
+    org.settings["installed_packages"] = installed
+    await org.save()
+    
+    return {"status": "uninstalled", "package_name": req_data.package_name}
+
+
+

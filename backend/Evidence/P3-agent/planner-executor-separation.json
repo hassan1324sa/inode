@@ -1,0 +1,20 @@
+{
+  "WorkflowType": "WorkflowOrchestrator",
+  "DeterministicState": "PlanExecutor",
+  "StepTransitions": [
+    "PLANNED -> VALIDATED -> RUNNING -> WAITING_FOR_TOOL -> OBSERVING -> COMPLETED"
+  ],
+  "ActivitiesExecuted": [
+    {
+      "activity": "plan_activity",
+      "caller": "WorkflowOrchestrator",
+      "description": "LLM Planning Loop run inside activity"
+    },
+    {
+      "activity": "execute_tool_activity",
+      "caller": "PlanExecutor",
+      "description": "Tool capability run inside sandboxed activity"
+    }
+  ],
+  "WorkflowIOPollutionFree": true
+}

@@ -1,0 +1,48 @@
+Input Nodes:
+[
+  {
+    "id": "node-trigger",
+    "type": "manual_trigger"
+  },
+  {
+    "id": "node-a",
+    "type": "ai_agent"
+  },
+  {
+    "id": "node-b",
+    "type": "send-email"
+  }
+]
+
+Input Edges:
+[
+  {
+    "source": "node-trigger",
+    "target": "node-a",
+    "sourceHandle": "default",
+    "targetHandle": "default"
+  },
+  {
+    "source": "node-a",
+    "target": "node-b",
+    "sourceHandle": "default",
+    "targetHandle": "default"
+  },
+  {
+    "source": "node-b",
+    "target": "node-a",
+    "sourceHandle": "default",
+    "targetHandle": "default"
+  }
+]
+
+→ Validation rule: Structural Cycle check
+→ Actual result:
+{
+  "statusCode": 400,
+  "code": "VALIDATION_ERROR",
+  "message": "{'message': 'Structural cycle check failed', 'errors': ['Structural cycle detected: node-b -> node-a']}",
+  "detail": "{'message': 'Structural cycle check failed', 'errors': ['Structural cycle detected: node-b -> node-a']}"
+}
+→ HTTP status: 400
+→ Temporal invocation = NO

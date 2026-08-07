@@ -23,10 +23,13 @@ async def test_auth_flow(client: AsyncClient):
     assert "id" in data
 
     # Login
-    response = await client.post("/api/v1/auth/login")
+    response = await client.post("/api/v1/auth/login", json={
+        "email": "test@example.com",
+        "password": "securepassword"
+    })
     assert response.status_code == 200
     login_data = response.json()
-    assert login_data["access_token"] == "mock_token"
+    assert "access_token" in login_data
 
 @pytest.mark.anyio
 async def test_organizations_flow(client: AsyncClient):
@@ -39,13 +42,21 @@ async def test_organizations_flow(client: AsyncClient):
     resp = await client.post("/api/v1/auth/register", json=register_payload)
     owner_id = resp.json()["id"]
 
+    # Login to get token
+    resp_login = await client.post("/api/v1/auth/login", json={
+        "email": "owner@example.com",
+        "password": "ownerpassword"
+    })
+    token = resp_login.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
     # Create Org
     org_payload = {
         "name": "Test Org",
         "slug": "test-org",
         "owner_id": owner_id
     }
-    response = await client.post("/api/v1/organizations/", json=org_payload)
+    response = await client.post("/api/v1/organizations/", json=org_payload, headers=headers)
     assert response.status_code == 200
     org_data = response.json()
     assert org_data["name"] == "Test Org"
@@ -53,7 +64,7 @@ async def test_organizations_flow(client: AsyncClient):
     assert "id" in org_data
 
     # List Orgs
-    response = await client.get("/api/v1/organizations/")
+    response = await client.get("/api/v1/organizations/", headers=headers)
     assert response.status_code == 200
     orgs_list = response.json()
     assert len(orgs_list) >= 1
@@ -69,65 +80,82 @@ async def test_workflow_and_execution_flow(client: AsyncClient):
     })
     owner_id = resp.json()["id"]
 
+    # Login to get token
+    resp_login = await client.post("/api/v1/auth/login", json={
+        "email": "wf_owner@example.com",
+        "password": "password"
+    })
+    token = resp_login.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
     resp = await client.post("/api/v1/organizations/", json={
         "name": "WF Org",
         "slug": "wf-org",
         "owner_id": owner_id
-    })
+    }, headers=headers)
     org_id = resp.json()["id"]
 
     # Create Workflow
     wf_payload = {
         "organization_id": org_id,
         "name": "Demo Workflow",
-        "description": "My first automated workflow"
+        "description": "My first automated workflow",
+        "nodes": [
+            {"id": "node-trigger", "type": "manual_trigger"}
+        ],
+        "edges": []
     }
-    response = await client.post("/api/v1/workflows/", json=wf_payload)
+    response = await client.post("/api/v1/workflows/", json=wf_payload, headers=headers)
     assert response.status_code == 200
     wf_data = response.json()
     assert wf_data["name"] == "Demo Workflow"
     wf_id = wf_data["id"]
 
     # List Workflows
-    response = await client.get("/api/v1/workflows/")
+    response = await client.get("/api/v1/workflows/", headers=headers)
     assert response.status_code == 200
     wfs_list = response.json()
     assert any(w["id"] == wf_id for w in wfs_list)
 
     # Create Version (implicitly creates v2 version)
-    response = await client.post(f"/api/v1/workflows/{wf_id}/versions")
+    response = await client.post(f"/api/v1/workflows/{wf_id}/versions", json={
+        "nodes": [{"id": "node-trigger", "type": "manual_trigger"}],
+        "edges": []
+    }, headers=headers)
     assert response.status_code == 200
     version_data = response.json()
     assert version_data["version"] == "v2"
+
 
     # Execute Workflow
     exec_payload = {
         "trigger_type": "Manual",
         "inputs": {}
     }
-    response = await client.post(f"/api/v1/workflows/{wf_id}/execute", json=exec_payload)
+    response = await client.post(f"/api/v1/workflows/{wf_id}/execute", json=exec_payload, headers=headers)
     assert response.status_code == 200
     exec_data = response.json()
     assert exec_data["status"] == "Queued"
     exec_id = exec_data["id"]
 
     # List Executions
-    response = await client.get(f"/api/v1/workflows/{wf_id}/executions")
+    response = await client.get(f"/api/v1/workflows/{wf_id}/executions", headers=headers)
     assert response.status_code == 200
     executions_list = response.json()
     assert any(e["id"] == exec_id for e in executions_list)
 
     # Pause Execution
-    response = await client.post(f"/api/v1/workflows/{wf_id}/executions/{exec_id}/pause")
+    response = await client.post(f"/api/v1/workflows/{wf_id}/executions/{exec_id}/pause", headers=headers)
     assert response.status_code == 200
     assert response.json()["message"] == "Pause signal sent successfully"
 
     # Resume Execution
-    response = await client.post(f"/api/v1/workflows/{wf_id}/executions/{exec_id}/resume")
+    response = await client.post(f"/api/v1/workflows/{wf_id}/executions/{exec_id}/resume", headers=headers)
     assert response.status_code == 200
     assert response.json()["message"] == "Resume signal sent successfully"
 
     # Cancel Execution
-    response = await client.post(f"/api/v1/workflows/{wf_id}/executions/{exec_id}/cancel")
+    response = await client.post(f"/api/v1/workflows/{wf_id}/executions/{exec_id}/cancel", headers=headers)
     assert response.status_code == 200
     assert response.json()["message"] == "Cancellation request sent successfully"
+

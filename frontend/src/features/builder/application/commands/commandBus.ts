@@ -32,6 +32,23 @@ export class ConnectNodesCommand implements Command {
 
   public execute(): void {
     const projection = useWorkflowProjection.getState();
+
+    // Invariant: Self-connection guard
+    if (this.edge.source === this.edge.target) {
+      throw new Error('Self-connections are not allowed.');
+    }
+
+    // Invariant: Duplicate connection guard (matching source, target, and handles)
+    const isDuplicate = projection.edges.some(e =>
+      e.source === this.edge.source &&
+      e.target === this.edge.target &&
+      e.sourceHandle === this.edge.sourceHandle &&
+      e.targetHandle === this.edge.targetHandle
+    );
+    if (isDuplicate) {
+      throw new Error('Duplicate connections are not allowed.');
+    }
+
     projection.updateEdges([...projection.edges, this.edge]);
   }
 
@@ -53,16 +70,18 @@ export class DeleteNodeCommand implements Command {
   public execute(): void {
     const projection = useWorkflowProjection.getState();
     const node = projection.nodes.find(n => n.id === this.nodeId);
-    if (node) {
-      this.deletedNode = node;
-      this.deletedEdges = projection.edges.filter(e => e.source === this.nodeId || e.target === this.nodeId);
-      
-      projection.updateNodes(projection.nodes.filter(n => n.id !== this.nodeId));
-      projection.updateEdges(projection.edges.filter(e => e.source !== this.nodeId && e.target !== this.nodeId));
+    if (!node) {
+      throw new Error(`Node with ID ${this.nodeId} not found`);
     }
+    this.deletedNode = node;
+    this.deletedEdges = projection.edges.filter(e => e.source === this.nodeId || e.target === this.nodeId);
+    
+    projection.updateNodes(projection.nodes.filter(n => n.id !== this.nodeId));
+    projection.updateEdges(projection.edges.filter(e => e.source !== this.nodeId && e.target !== this.nodeId));
   }
 
   public undo(): void {
+    if (!this.deletedNode) return;
     const projection = useWorkflowProjection.getState();
     projection.updateNodes([...projection.nodes, this.deletedNode]);
     projection.updateEdges([...projection.edges, ...this.deletedEdges]);
@@ -74,11 +93,15 @@ export class MoveNodeCommand implements Command {
   private nodeId: NodeId;
   private newPosition: { x: number; y: number };
 
-  constructor(nodeId: NodeId, newPosition: { x: number; y: number }) {
+  constructor(nodeId: NodeId, newPosition: { x: number; y: number }, oldPosition?: { x: number; y: number }) {
     this.nodeId = nodeId;
     this.newPosition = newPosition;
-    const node = useWorkflowProjection.getState().nodes.find(n => n.id === nodeId);
-    this.oldPosition = node ? { ...node.position } : { x: 0, y: 0 };
+    if (oldPosition) {
+      this.oldPosition = oldPosition;
+    } else {
+      const node = useWorkflowProjection.getState().nodes.find(n => n.id === nodeId);
+      this.oldPosition = node ? { ...node.position } : { x: 0, y: 0 };
+    }
   }
 
   public execute(): void {
@@ -103,9 +126,11 @@ export class UpdateNodePropertyCommand implements Command {
 
   constructor(nodeId: NodeId, newData: any) {
     this.nodeId = nodeId;
-    this.newData = newData;
     const node = useWorkflowProjection.getState().nodes.find(n => n.id === nodeId);
-    this.oldData = node ? { ...node.data } : {};
+    // Deep/complete clone of the old data to restore on undo
+    this.oldData = node ? JSON.parse(JSON.stringify(node.data)) : {};
+    // Merge new data patch on top of old data snapshot
+    this.newData = { ...this.oldData, ...newData };
   }
 
   public execute(): void {
@@ -216,8 +241,12 @@ export class DeleteSelectionCommand implements Command {
 
 export class CommandBus {
   public static dispatch(command: Command): void {
-    history.execute(command);
-    useWorkflowProjection.getState().incrementHistoryVersion();
+    try {
+      history.execute(command);
+      useWorkflowProjection.getState().incrementHistoryVersion();
+    } catch (e) {
+      console.warn("Command execution failed, not added to history:", e);
+    }
   }
 
   public static undo(): void {
@@ -236,6 +265,11 @@ export class CommandBus {
 
   public static canRedo(): boolean {
     return history.canRedo();
+  }
+
+  public static clearHistory(): void {
+    history.clear();
+    useWorkflowProjection.getState().incrementHistoryVersion();
   }
 }
 

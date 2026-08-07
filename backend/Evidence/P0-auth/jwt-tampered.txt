@@ -1,0 +1,11 @@
+GET /api/v1/organizations/ with tampered token
+Token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2YTc0ZTMwMjdlYTdkYWQwYzc0NWIzN2MiLCJvcmdfaWQiOiI2YTYzZTE0MDU0NmQ5YjAzMzRkYmEzNzYiLCJ3c19pZCI6ImRlZmF1bHQtdyIsImVudl9pZCI6ImRlZmF1bHQtZSIsInByb2pfaWQiOiJkZWZhdWx0LXAiLCJpYXQiOjE3ODYwNDUxODYsImV4cCI6MTc4NjA0Njk4NiwianRpIjoiOGJkZDVmMmItYTAyOC00ZTMxLThmN2EtNjcyZjUyMTJjYzkyIn0.ytkgyFLJsuee08vPKAH4hgL7gpAyiSDYBvoijwaaaaa
+
+Response Status: 401
+Response Body:
+{
+  "statusCode": 401,
+  "code": "UNAUTHORIZED",
+  "message": "Invalid or expired JWT token",
+  "detail": "Invalid or expired JWT token: Signature verification failed."
+}

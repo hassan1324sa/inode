@@ -7,7 +7,7 @@ export const Sidebar: React.FC = () => {
   const { theme, setTheme } = useUIProjection();
 
   const navItems = [
-    { name: 'Canvas Builder', path: '/', icon: 'Workflow' },
+    { name: 'Workflows', path: '/workflows', icon: 'Workflow' },
     { name: 'Executions', path: '/executions', icon: 'Activity' },
     { name: 'Credentials', path: '/credentials', icon: 'Key' },
     { name: 'Settings', path: '/settings', icon: 'Sliders' },
@@ -33,16 +33,21 @@ export const Sidebar: React.FC = () => {
               <NavLink
                 key={item.path}
                 to={item.path}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-150 border border-transparent ${
-                    isActive
+                className={({ isActive }) => {
+                  // Ensure /workflows/:id builder context activates the Workflows tab
+                  const isWorkflowsContext = item.path === '/workflows' && window.location.pathname.startsWith('/workflows');
+                  const active = isActive || isWorkflowsContext;
+                  return `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-150 border border-transparent ${
+                    active
                       ? 'bg-primary text-white border-black/40 shadow-inner'
                       : 'text-muted-foreground bg-gradient-to-b from-secondary to-muted hover:text-foreground hover:border-border'
-                  }`
-                }
-                style={({ isActive }) => 
-                  isActive ? { boxShadow: 'inset 1px 2px 4px rgba(0,0,0,0.6)' } : { boxShadow: 'inset 0 1px 0px rgba(255,255,255,0.08), 0 2px 4px rgba(0,0,0,0.3)' }
-                }
+                  }`;
+                }}
+                style={({ isActive }) => {
+                  const isWorkflowsContext = item.path === '/workflows' && window.location.pathname.startsWith('/workflows');
+                  const active = isActive || isWorkflowsContext;
+                  return active ? { boxShadow: 'inset 1px 2px 4px rgba(0,0,0,0.6)' } : { boxShadow: 'inset 0 1px 0px rgba(255,255,255,0.08), 0 2px 4px rgba(0,0,0,0.3)' };
+                }}
               >
                 <Icon size={16} />
                 {item.name}

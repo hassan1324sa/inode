@@ -1,0 +1,23 @@
+{
+  "Discover": {
+    "tool": "sum_tool",
+    "status": "FOUND"
+  },
+  "ValidateSchema": {
+    "input": {
+      "a": 10,
+      "b": 20
+    },
+    "status": "PASSED"
+  },
+  "Authorization": {
+    "required_permissions": [
+      "math:calc"
+    ],
+    "granted_permissions": [
+      "read_only"
+    ],
+    "status": "DENIED",
+    "error": "Execution of tool sum_tool denied: insufficient permissions."
+  }
+}

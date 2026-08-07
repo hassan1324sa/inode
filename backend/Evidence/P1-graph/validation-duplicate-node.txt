@@ -1,0 +1,29 @@
+Input Nodes:
+[
+  {
+    "id": "node-trigger",
+    "type": "manual_trigger"
+  },
+  {
+    "id": "node-ai",
+    "type": "ai_agent"
+  },
+  {
+    "id": "node-ai",
+    "type": "send-email"
+  }
+]
+
+Input Edges:
+[]
+
+→ Validation rule: Duplicate Node ID check
+→ Actual result:
+{
+  "statusCode": 400,
+  "code": "VALIDATION_ERROR",
+  "message": "{'message': 'Duplicate node IDs or missing IDs', 'errors': ['Duplicate node ID detected: node-ai']}",
+  "detail": "{'message': 'Duplicate node IDs or missing IDs', 'errors': ['Duplicate node ID detected: node-ai']}"
+}
+→ HTTP status: 400
+→ Temporal invocation = NO

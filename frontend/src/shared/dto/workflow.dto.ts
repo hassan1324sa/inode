@@ -25,6 +25,7 @@ export interface WorkflowDTO {
     target: string;
     sourceHandle?: string;
     targetHandle?: string;
+    label?: string;
   }[];
 }
 

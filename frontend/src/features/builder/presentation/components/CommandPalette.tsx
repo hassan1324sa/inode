@@ -1,11 +1,16 @@
 import React from 'react';
 import * as Icons from 'lucide-react';
-import { useUIProjection } from '../../application/services';
-import { CommandBus } from '../../application/commands/commandBus';
+import { useUIProjection, useWorkflowProjection } from '../../application/services';
+import { CommandBus, DeleteSelectionCommand } from '../../application/commands/commandBus';
 
-export const CommandPalette: React.FC = () => {
+interface CommandPaletteProps {
+  onRunWorkflow?: () => void;
+}
+
+export const CommandPalette: React.FC<CommandPaletteProps> = ({ onRunWorkflow }) => {
   const { commandPaletteOpen, setCommandPaletteOpen } = useUIProjection();
   const [query, setQuery] = React.useState('');
+  const { nodes, edges } = useWorkflowProjection();
 
 
   React.useEffect(() => {
@@ -18,23 +23,33 @@ export const CommandPalette: React.FC = () => {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        setCommandPaletteOpen(!commandPaletteOpen);
+        setCommandPaletteOpen(!useUIProjection.getState().commandPaletteOpen);
       }
       if (e.key === 'Escape' || e.code === 'Escape') {
-        setCommandPaletteOpen(false);
+        if (useUIProjection.getState().commandPaletteOpen) {
+          setCommandPaletteOpen(false);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [commandPaletteOpen, setCommandPaletteOpen]);
+  }, [setCommandPaletteOpen]);
 
   if (!commandPaletteOpen) return null;
 
+  const handleClearCanvas = () => {
+    const nodeIds = nodes.map(n => n.id);
+    const edgeIds = edges.map(e => e.id);
+    if (nodeIds.length > 0 || edgeIds.length > 0) {
+      CommandBus.dispatch(new DeleteSelectionCommand(nodeIds, edgeIds));
+    }
+  };
+
   const actions = [
-    { name: 'Run Workflow', desc: 'Trigger manual backend execution', icon: 'Play', action: () => alert('Starting execution...') },
+    { name: 'Run Workflow', desc: 'Trigger manual backend execution', icon: 'Play', action: () => onRunWorkflow?.() },
     { name: 'Undo Last Action', desc: 'Revert last canvas command', icon: 'Undo', action: () => CommandBus.undo() },
     { name: 'Redo Action', desc: 'Reapply last undone canvas command', icon: 'Redo', action: () => CommandBus.redo() },
-    { name: 'Clear Canvas', desc: 'Delete all nodes and edges', icon: 'Trash2', action: () => alert('Clear canvas triggered') },
+    { name: 'Clear Canvas', desc: 'Delete all nodes and edges', icon: 'Trash2', action: handleClearCanvas },
   ];
 
   const filteredActions = actions.filter(

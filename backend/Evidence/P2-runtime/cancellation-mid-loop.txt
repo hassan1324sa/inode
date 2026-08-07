@@ -1,0 +1,6 @@
+Iterations completed: 2 (Ahmed, Ali)
+Iteration started: 3 (Bob)
+Cancellation requested: YES
+Error raised: Temporal cancellation requested
+Iterations after cancellation: 0
+Final workflow status: CANCELLED

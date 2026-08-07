@@ -66,6 +66,7 @@ export class FetchNodeRegistry {
         streaming: false,
         retryable: true,
         credentialRequired: false,
+        supports_agent_tool: true,
       },
       schema: {
         version: 1,
@@ -133,12 +134,33 @@ export class FetchNodeRegistry {
             ],
           },
           { name: 'prompt', label: 'System Instructions / Prompt', type: 'textarea', required: true, defaultValue: '' },
-          { name: 'credentialId', label: 'Credentials', type: 'secret', required: true },
+          {
+            name: 'memoryProvider',
+            label: 'Memory Provider',
+            type: 'select',
+            defaultValue: 'conversation',
+            options: [
+              { label: 'None', value: 'none' },
+              { label: 'Conversation Memory', value: 'conversation' },
+              { label: 'Workflow Memory', value: 'workflow' },
+              { label: 'Persistent Memory', value: 'persistent' }
+            ]
+          },
+          { name: 'memoryKey', label: 'Memory Key', type: 'text', defaultValue: 'customer_{{current_row.email}}' },
+          { name: 'enabledTools', label: 'Enabled Tools (comma-separated)', type: 'text', defaultValue: 'google_sheets' },
+          { name: 'apiKey', label: 'API Key / Token', type: 'secret', required: false, defaultValue: '' },
         ],
       },
       icon: 'Cpu',
       color: '#10B981',
-      defaultData: () => ({ model: 'gemini-1.5-flash', prompt: 'Summarize the input', credentialId: '' }),
+      defaultData: () => ({
+        model: 'gemini-1.5-flash',
+        prompt: 'Summarize the input',
+        memoryProvider: 'conversation',
+        memoryKey: 'customer_{{current_row.email}}',
+        enabledTools: 'google_sheets',
+        apiKey: ''
+      }),
       validate: (data: any) => {
         const errors: string[] = [];
         if (!data?.prompt) errors.push('Prompt is required');
@@ -198,6 +220,29 @@ export class FetchNodeRegistry {
       migrate: (_v, data) => data as any,
     });
 
+    // 5b. Manual Execute Trigger Node (Triggers)
+    this.plugins.set('manual_trigger', {
+      metadata: {
+        id: 'manual_trigger',
+        name: 'On Execute Click',
+        category: 'Triggers',
+        description: 'Execute workflow when clicking the manual Run button',
+        supportsVersion: 1,
+        minimumEngineVersion: 1,
+        aliases: ['manual', 'click', 'run', 'execute', 'trigger'],
+      },
+      capabilities: { trigger: true, async: false, streaming: false, retryable: false, credentialRequired: false },
+      schema: {
+        version: 1,
+        fields: [],
+      },
+      icon: 'Zap',
+      color: '#10B981',
+      defaultData: () => ({}),
+      validate: () => ({ isValid: true, errors: [] }),
+      migrate: (_v, data) => data as any,
+    });
+
     // 6. Slack Notification Node (Communication)
     this.plugins.set('slack_notification', {
       metadata: {
@@ -209,7 +254,7 @@ export class FetchNodeRegistry {
         minimumEngineVersion: 1,
         aliases: ['slack', 'chat', 'message', 'alert'],
       },
-      capabilities: { trigger: false, async: true, streaming: false, retryable: true, credentialRequired: true },
+      capabilities: { trigger: false, async: true, streaming: false, retryable: true, credentialRequired: true, supports_agent_tool: true },
       schema: {
         version: 1,
         fields: [
@@ -290,7 +335,7 @@ export class FetchNodeRegistry {
         minimumEngineVersion: 1,
         aliases: ['file', 'read', 'write', 's3', 'storage'],
       },
-      capabilities: { trigger: false, async: true, streaming: false, retryable: true, credentialRequired: false },
+      capabilities: { trigger: false, async: true, streaming: false, retryable: true, credentialRequired: false, supports_agent_tool: true },
       schema: {
         version: 1,
         fields: [
@@ -302,6 +347,47 @@ export class FetchNodeRegistry {
       color: '#6366F1',
       defaultData: () => ({ operation: 'read', filePath: '/data/output.json' }),
       validate: (data: any) => ({ isValid: !!data?.filePath, errors: data?.filePath ? [] : ['File Path required'] }),
+      migrate: (_v, data) => data as any,
+    });
+
+    // 9b. Google Sheets Node (Files)
+    this.plugins.set('google_sheets', {
+      metadata: {
+        id: 'google_sheets',
+        name: 'Google Sheets',
+        category: 'Files',
+        description: 'Read, write, append, or delete rows from Google Sheets',
+        supportsVersion: 1,
+        minimumEngineVersion: 1,
+        aliases: ['sheets', 'excel', 'table', 'row', 'google'],
+      },
+      capabilities: { trigger: false, async: true, streaming: false, retryable: true, credentialRequired: false, supports_agent_tool: true },
+      schema: {
+        version: 1,
+        fields: [
+          {
+            name: 'operation',
+            label: 'Operation',
+            type: 'select',
+            defaultValue: 'read',
+            options: [
+              { label: 'Read Rows', value: 'read' },
+              { label: 'Append Row', value: 'append' },
+              { label: 'Update Row', value: 'update' },
+              { label: 'Delete Row', value: 'delete' },
+            ],
+          },
+          { name: 'spreadsheetId', label: 'Spreadsheet ID', type: 'text', required: true, defaultValue: 'default_sheet' },
+          { name: 'range', label: 'Sheet Name / Range', type: 'text', defaultValue: 'Sheet1' },
+          { name: 'rowId', label: 'Row ID (for Update/Delete)', type: 'text', defaultValue: '' },
+          { name: 'row', label: 'Row Data (JSON, for Append)', type: 'textarea', defaultValue: '{}' },
+          { name: 'updates', label: 'Updates Data (JSON, for Update)', type: 'textarea', defaultValue: '{}' },
+        ],
+      },
+      icon: 'FileSpreadsheet',
+      color: '#10B981',
+      defaultData: () => ({ operation: 'read', spreadsheetId: 'default_sheet', range: 'Sheet1', rowId: '', row: '{}', updates: '{}' }),
+      validate: (data: any) => ({ isValid: !!data?.spreadsheetId, errors: data?.spreadsheetId ? [] : ['Spreadsheet ID required'] }),
       migrate: (_v, data) => data as any,
     });
 
@@ -352,6 +438,113 @@ export class FetchNodeRegistry {
       color: '#8B5CF6',
       defaultData: () => ({ packageName: '@fluxa/pkg-example' }),
       validate: (data: any) => ({ isValid: !!data?.packageName, errors: data?.packageName ? [] : ['Package name required'] }),
+      migrate: (_v, data) => data as any,
+    });
+    // 12. Send Email Node (Communication)
+    this.plugins.set('send-email', {
+      metadata: {
+        id: 'send-email',
+        name: 'Send Email',
+        category: 'Communication',
+        description: 'Send custom proposals or outgoing messages via SMTP',
+        supportsVersion: 1,
+        minimumEngineVersion: 1,
+        aliases: ['email', 'smtp', 'mail', 'sendgrid', 'outbox'],
+      },
+      capabilities: { trigger: false, async: true, streaming: false, retryable: true, credentialRequired: false, supports_agent_tool: true },
+      schema: {
+        version: 1,
+        fields: [
+          { name: 'smtp_host', label: 'SMTP Host', type: 'text', required: true, defaultValue: 'localhost' },
+          { name: 'smtp_port', label: 'SMTP Port', type: 'text', required: true, defaultValue: '1025' },
+          { name: 'username', label: 'Username', type: 'text', required: true, defaultValue: 'sender@example.com' },
+          { name: 'recipient', label: 'Recipient Email', type: 'text', required: true, defaultValue: '{{email}}' },
+          { name: 'subject', label: 'Subject', type: 'text', required: true, defaultValue: 'Proposal' },
+          { name: 'body', label: 'Email Body (Plain text or template)', type: 'textarea', required: true, defaultValue: '' },
+          { name: 'password_ref', label: 'Vault SMTP Password Ref', type: 'secret', required: false, defaultValue: '' }
+        ],
+      },
+      icon: 'Mail',
+      color: '#F43F5E',
+      defaultData: () => ({
+        smtp_host: 'localhost',
+        smtp_port: '1025',
+        username: 'sender@example.com',
+        recipient: '{{email}}',
+        subject: 'Proposal',
+        body: 'Hello...',
+        password_ref: ''
+      }),
+      validate: (data: any) => {
+        const errors: string[] = [];
+        if (!data?.recipient) errors.push('Recipient Email is required');
+        if (!data?.subject) errors.push('Subject is required');
+        return { isValid: errors.length === 0, errors };
+      },
+      migrate: (_v, data) => data as any,
+    });
+    // 13. Read Excel Node (Files)
+    this.plugins.set('read-excel', {
+      metadata: {
+        id: 'read-excel',
+        name: 'Read Excel / CSV',
+        category: 'Files',
+        description: 'Read rows of data from Excel or CSV files',
+        supportsVersion: 1,
+        minimumEngineVersion: 1,
+        aliases: ['excel', 'csv', 'table', 'rows', 'spreadsheet'],
+      },
+      capabilities: { trigger: false, async: true, streaming: false, retryable: true, credentialRequired: false, supports_agent_tool: true },
+      schema: {
+        version: 1,
+        fields: [
+          { name: 'file_path', label: 'File Path (.csv)', type: 'text', required: true, defaultValue: 'd:\\Fluxa\\leads.csv' },
+          { name: 'output_var', label: 'Output Variable Name', type: 'text', required: true, defaultValue: 'rows' }
+        ],
+      },
+      icon: 'FileSpreadsheet',
+      color: '#10B981',
+      defaultData: () => ({
+        file_path: 'd:\\Fluxa\\leads.csv',
+        output_var: 'rows'
+      }),
+      validate: (data: any) => {
+        const errors: string[] = [];
+        if (!data?.file_path) errors.push('File Path is required');
+        return { isValid: errors.length === 0, errors };
+      },
+      migrate: (_v, data) => data as any,
+    });
+    // 14. Loop Node (Logic)
+    this.plugins.set('loop', {
+      metadata: {
+        id: 'loop',
+        name: 'Loop / Iterator',
+        category: 'Logic',
+        description: 'Iterate over collection items (e.g. Excel rows) and run sub-nodes',
+        supportsVersion: 1,
+        minimumEngineVersion: 1,
+        aliases: ['loop', 'for', 'each', 'iterator', 'repeat'],
+      },
+      capabilities: { trigger: false, async: true, streaming: false, retryable: false, credentialRequired: false },
+      schema: {
+        version: 1,
+        fields: [
+          { name: 'items_var', label: 'Items Variable (Array)', type: 'text', required: true, defaultValue: 'rows' },
+          { name: 'loop_nodes_json', label: 'Loop Sub-Nodes Configurations (JSON)', type: 'textarea', defaultValue: '[]' }
+        ],
+      },
+      icon: 'Repeat',
+      color: '#F59E0B',
+      defaultData: () => ({
+        items_var: 'rows',
+        loop_nodes_json: '[]'
+      }),
+      validate: (data: any) => {
+        const errors: string[] = [];
+        if (!data?.items_var) errors.push('Items Variable is required');
+        return { isValid: errors.length === 0, errors };
+      },
       migrate: (_v, data) => data as any,
     });
   }

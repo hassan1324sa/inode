@@ -64,6 +64,26 @@ export const NodePalette: React.FC<NodePaletteProps> = ({ onDragStart, onOpenPac
     });
   }, [plugins, selectedCategory, favorites, recent]);
 
+  const highlightText = (text: string, search: string) => {
+    if (!search.trim()) return <span>{text}</span>;
+    const escaped = search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const regex = new RegExp(`(${escaped})`, 'gi');
+    const parts = text.split(regex);
+    return (
+      <span>
+        {parts.map((part, i) =>
+          regex.test(part) ? (
+            <mark key={i} className="bg-primary/30 text-primary-foreground font-semibold px-0.5 rounded-[2px]">
+              {part}
+            </mark>
+          ) : (
+            <span key={i}>{part}</span>
+          )
+        )}
+      </span>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full border-r border-border p-3.5 skeuo-raised border-l-0 text-left overflow-hidden">
       {/* Title Header */}
@@ -133,7 +153,9 @@ export const NodePalette: React.FC<NodePaletteProps> = ({ onDragStart, onOpenPac
                   <IconComponent size={14} />
                 </div>
                 <div className="flex flex-col min-w-0">
-                  <span className="font-bold text-xs text-foreground truncate">{plugin.metadata.name}</span>
+                  <span className="font-bold text-xs text-foreground truncate">
+                    {highlightText(plugin.metadata.name, searchTerm)}
+                  </span>
                   <span className="text-[10px] text-muted-foreground line-clamp-1">{plugin.metadata.description}</span>
                 </div>
               </div>

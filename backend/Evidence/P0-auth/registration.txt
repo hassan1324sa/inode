@@ -1,0 +1,15 @@
+POST /api/v1/auth/register
+Payload: {
+  "email": "auditor@fluxa.ai",
+  "password": "supersecurepassword123",
+  "name": "System Auditor"
+}
+
+Response Status: 200
+Response Body:
+{
+  "id": "6a74e3027ea7dad0c745b37c",
+  "email": "auditor@fluxa.ai",
+  "name": "System Auditor",
+  "is_verified": true
+}

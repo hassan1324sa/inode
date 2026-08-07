@@ -1,0 +1,3 @@
+Result: FAILED
+Error: Loop iteration count 101 exceeds safety threshold of 100.
+MAX_ITERATIONS rule successfully enforced.

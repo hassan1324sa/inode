@@ -1,6 +1,8 @@
 from pydantic import BaseModel, Field
-from typing import Dict, Any, List, Type, Optional
-from app.core.nodes.node_executor import BaseNodeExecutor
+from typing import Dict, Any, List, Type, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.core.nodes.node_executor import BaseNodeExecutor
 
 class NodeCapabilities(BaseModel):
     supports_retry: bool = False
@@ -25,10 +27,10 @@ class NodeRegistry:
     Platform Node Registry managing registration and lookup of NodeManifest schemas and their executors.
     """
     _manifests: Dict[str, NodeManifest] = {}
-    _executors: Dict[str, Type[BaseNodeExecutor]] = {}
+    _executors: Dict[str, Type["BaseNodeExecutor"]] = {}
 
     @classmethod
-    def register(cls, manifest: NodeManifest, executor_cls: Type[BaseNodeExecutor]):
+    def register(cls, manifest: NodeManifest, executor_cls: Type["BaseNodeExecutor"]):
         if manifest.id in cls._manifests:
             # Check if registering the exact same version and class is okay
             existing = cls._manifests[manifest.id]
@@ -43,7 +45,7 @@ class NodeRegistry:
         return cls._manifests.get(node_type)
 
     @classmethod
-    def get_executor(cls, node_type: str) -> Optional[Type[BaseNodeExecutor]]:
+    def get_executor(cls, node_type: str) -> Optional[Type["BaseNodeExecutor"]]:
         return cls._executors.get(node_type)
 
     @classmethod

@@ -18,7 +18,8 @@ class ExecutionService:
         execution_id: str,
         workflow_definition_id: str,
         tenant_id: str,
-        nodes: List[Dict[str, Any]]
+        nodes: List[Dict[str, Any]],
+        edges: List[Dict[str, Any]] = None
     ) -> str:
         client = await self.client_wrapper.get_client()
         
@@ -27,7 +28,8 @@ class ExecutionService:
             "execution_id": execution_id,
             "workflow_definition_id": workflow_definition_id,
             "tenant_id": tenant_id,
-            "nodes": nodes
+            "nodes": nodes,
+            "edges": edges or []
         }
         
         # Search Attributes can be set if defined in Temporal cluster.

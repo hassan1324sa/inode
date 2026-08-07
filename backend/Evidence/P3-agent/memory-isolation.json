@@ -1,0 +1,21 @@
+{
+  "Tenant_A": {
+    "StoredConcepts": [
+      "Secret formula of Tenant A"
+    ],
+    "Query": "Secret formula",
+    "Result": [
+      "Secret formula of Tenant A"
+    ]
+  },
+  "Tenant_B": {
+    "StoredConcepts": [
+      "Secret formula of Tenant B"
+    ],
+    "Query": "Secret formula",
+    "Result": [
+      "Secret formula of Tenant B"
+    ]
+  },
+  "CrossTenantLeakagePreventionVerified": true
+}

@@ -44,10 +44,34 @@ export const FlowCanvas: React.FC = () => {
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<any>([]);
   const [reactFlowInstance, setReactFlowInstance] = React.useState<ReactFlowInstance | null>(null);
 
-  // Canvas control toggles
-  const [showGrid, setShowGrid] = React.useState(true);
-  const [showMiniMap, setShowMiniMap] = React.useState(true);
-  const [snapToGrid, setSnapToGrid] = React.useState(false);
+  // Canvas control toggles loaded from local UI preferences
+  const [showGrid, setShowGrid] = React.useState(() => {
+    return localStorage.getItem('fluxa_ui_show_grid') !== 'false';
+  });
+  const [showMiniMap, setShowMiniMap] = React.useState(() => {
+    return localStorage.getItem('fluxa_ui_show_minimap') !== 'false';
+  });
+  const [snapToGrid, setSnapToGrid] = React.useState(() => {
+    return localStorage.getItem('fluxa_ui_snap_to_grid') === 'true';
+  });
+
+  const toggleGrid = () => setShowGrid(prev => {
+    const next = !prev;
+    localStorage.setItem('fluxa_ui_show_grid', String(next));
+    return next;
+  });
+
+  const toggleMiniMap = () => setShowMiniMap(prev => {
+    const next = !prev;
+    localStorage.setItem('fluxa_ui_show_minimap', String(next));
+    return next;
+  });
+
+  const toggleSnap = () => setSnapToGrid(prev => {
+    const next = !prev;
+    localStorage.setItem('fluxa_ui_snap_to_grid', String(next));
+    return next;
+  });
 
   // Context Menus
   const [contextMenu, setContextMenu] = React.useState<{
@@ -59,6 +83,7 @@ export const FlowCanvas: React.FC = () => {
 
   const copiedNodeRef = React.useRef<any>(null);
   const { showToast } = useToast();
+  const dragStartPositions = React.useRef<Record<string, { x: number; y: number }>>({});
 
   // Sync presentation nodes/edges with Domain state projections
   React.useEffect(() => {
@@ -125,6 +150,25 @@ export const FlowCanvas: React.FC = () => {
   // Connect handler with default Edge Labels support (Item 10)
   const onConnect = React.useCallback(
     (params: Connection) => {
+      // UI Level: Self-connection guard
+      if (params.source === params.target) {
+        showToast('Cannot connect a node to itself', 'warning');
+        return;
+      }
+
+      // UI Level: Duplicate connection guard (matching source, target, and handles)
+      const existingEdges = useWorkflowProjection.getState().edges;
+      const isDuplicate = existingEdges.some(e =>
+        e.source === params.source &&
+        e.target === params.target &&
+        e.sourceHandle === (params.sourceHandle || undefined) &&
+        e.targetHandle === (params.targetHandle || undefined)
+      );
+      if (isDuplicate) {
+        showToast('Connection already exists', 'warning');
+        return;
+      }
+
       const edge: WorkflowEdge = {
         id: `e-${params.source}-${params.target}-${Date.now().toString(36)}`,
         source: params.source,
@@ -134,8 +178,12 @@ export const FlowCanvas: React.FC = () => {
         label: undefined,
       };
 
-      CommandBus.dispatch(new ConnectNodesCommand(edge));
-      showToast('Nodes connected', 'success', 2000);
+      try {
+        CommandBus.dispatch(new ConnectNodesCommand(edge));
+        showToast('Nodes connected', 'success', 2000);
+      } catch (err: any) {
+        showToast(err.message || 'Failed to connect nodes', 'error');
+      }
     },
     [showToast]
   );
@@ -176,9 +224,27 @@ export const FlowCanvas: React.FC = () => {
   );
 
   // Handle node movement history
-  const onNodeDragStop = React.useCallback((_event: any, node: Node) => {
-    CommandBus.dispatch(new MoveNodeCommand(node.id, node.position));
+  const onNodeDragStart = React.useCallback((_event: any, node: Node) => {
+    dragStartPositions.current[node.id] = { ...node.position };
   }, []);
+
+  const onNodeDragStop = React.useCallback((_event: any, node: Node) => {
+    const oldPos = dragStartPositions.current[node.id];
+    CommandBus.dispatch(new MoveNodeCommand(node.id, node.position, oldPos));
+    delete dragStartPositions.current[node.id];
+  }, []);
+
+  // Context Menu outside pointerdown dismissal
+  React.useEffect(() => {
+    if (!contextMenu) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('.context-menu-container')) return;
+      setContextMenu(null);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [contextMenu]);
 
   // Handle node selection
   const onNodeClick = React.useCallback(
@@ -270,6 +336,7 @@ export const FlowCanvas: React.FC = () => {
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
         onConnect={onConnect}
+        onNodeDragStart={onNodeDragStart}
         onNodeDragStop={onNodeDragStop}
         onNodeClick={onNodeClick}
         onNodeContextMenu={onNodeContextMenu}
@@ -281,6 +348,11 @@ export const FlowCanvas: React.FC = () => {
         selectionOnDrag={true}
         snapToGrid={snapToGrid}
         snapGrid={[16, 16]}
+        defaultEdgeOptions={{
+          type: 'default',
+          animated: true,
+          style: { stroke: 'hsl(var(--primary))', strokeWidth: 2.5 },
+        }}
         fitView
       >
         {showGrid && <Background color="hsl(var(--border))" gap={16} size={1} />}
@@ -300,37 +372,33 @@ export const FlowCanvas: React.FC = () => {
       {/* Floating Canvas Controls Bar (Item 2) */}
       <div className="absolute bottom-4 left-4 z-20 flex items-center gap-1 p-1.5 rounded-xl bg-card/90 border border-border shadow-xl backdrop-blur-md">
         <button
-          onClick={() => setShowGrid((prev) => !prev)}
+          onClick={toggleGrid}
           className={`p-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
             showGrid ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
           }`}
           title="Toggle Grid"
         >
-          <Icons.Grid size={15} />
+          <Icons.Grid size={14} />
           <span className="hidden sm:inline">Grid</span>
         </button>
         <button
-          onClick={() => setShowMiniMap((prev) => !prev)}
+          onClick={toggleMiniMap}
           className={`p-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-            showMiniMap
-              ? 'bg-primary/20 text-primary'
-              : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+            showMiniMap ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
           }`}
           title="Toggle MiniMap"
         >
-          <Icons.Map size={15} />
-          <span className="hidden sm:inline">MiniMap</span>
+          <Icons.Map size={14} />
+          <span className="hidden sm:inline">Map</span>
         </button>
         <button
-          onClick={() => setSnapToGrid((prev) => !prev)}
+          onClick={toggleSnap}
           className={`p-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-            snapToGrid
-              ? 'bg-primary/20 text-primary'
-              : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+            snapToGrid ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
           }`}
           title="Toggle Snap to Grid"
         >
-          <Icons.Magnet size={15} />
+          <Icons.Magnet size={14} />
           <span className="hidden sm:inline">Snap</span>
         </button>
         <div className="w-[1px] h-6 bg-border mx-1" />
@@ -345,41 +413,49 @@ export const FlowCanvas: React.FC = () => {
       </div>
 
       {/* Right-Click Context Menu (Item 11) */}
-      {contextMenu && (
-        <div
-          className="fixed z-50 bg-card border border-border rounded-xl shadow-2xl py-1.5 min-w-[160px] text-xs font-semibold animate-in fade-in zoom-in-95 duration-100"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-        >
-          {contextMenu.type === 'node' ? (
-            <>
-              <button
-                onClick={() => handleContextAction('duplicate')}
-                className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-secondary transition-colors text-foreground"
-              >
-                <Icons.Copy size={13} />
-                <span>Duplicate Node</span>
-              </button>
-              <button
-                onClick={() => handleContextAction('delete')}
-                className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-destructive hover:text-white transition-colors text-destructive"
-              >
-                <Icons.Trash2 size={13} />
-                <span>Delete Node</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => handleContextAction('fit')}
-                className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-secondary transition-colors text-foreground"
-              >
-                <Icons.Maximize2 size={13} />
-                <span>Fit Canvas View</span>
-              </button>
-            </>
-          )}
-        </div>
-      )}
+      {contextMenu && (() => {
+        // Boundary-aware positioning
+        const menuWidth = 160;
+        const menuHeight = contextMenu.type === 'node' ? 82 : 42;
+        const adjustedX = Math.min(contextMenu.x, window.innerWidth - menuWidth - 8);
+        const adjustedY = Math.min(contextMenu.y, window.innerHeight - menuHeight - 8);
+
+        return (
+          <div
+            className="fixed z-50 bg-card border border-border rounded-xl shadow-2xl py-1.5 min-w-[160px] text-xs font-semibold animate-in fade-in zoom-in-95 duration-100 context-menu-container"
+            style={{ top: adjustedY, left: adjustedX }}
+          >
+            {contextMenu.type === 'node' ? (
+              <>
+                <button
+                  onClick={() => handleContextAction('duplicate')}
+                  className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-secondary transition-colors text-foreground"
+                >
+                  <Icons.Copy size={13} />
+                  <span>Duplicate Node</span>
+                </button>
+                <button
+                  onClick={() => handleContextAction('delete')}
+                  className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-destructive hover:text-white transition-colors text-destructive"
+                >
+                  <Icons.Trash2 size={13} />
+                  <span>Delete Node</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => handleContextAction('fit')}
+                  className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-secondary transition-colors text-foreground"
+                >
+                  <Icons.Maximize2 size={13} />
+                  <span>Fit Canvas View</span>
+                </button>
+              </>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 };

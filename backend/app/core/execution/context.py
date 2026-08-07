@@ -29,6 +29,7 @@ class ExecutionContext(BaseModel):
     engine_version: int = 1
     schema_version: int = 1
     tenant_id: str
+    correlation_id: Optional[str] = None
     variables: Dict[str, Any] = Field(default_factory=dict)
     node_outputs: Dict[str, Any] = Field(default_factory=dict)
     current_node_id: Optional[str] = None

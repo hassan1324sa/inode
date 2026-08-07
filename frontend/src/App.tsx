@@ -1,16 +1,17 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
 import Sidebar from './shared/layout/Sidebar';
 import BuilderPage from './pages/BuilderPage';
 import ExecutionsPage from './pages/ExecutionsPage';
 import SettingsPage from './pages/SettingsPage';
 import CredentialsPage from './pages/CredentialsPage';
+import { WorkflowsPage } from './pages/WorkflowsPage';
 import './App.css';
 
 import { ToastProvider } from './shared/components/Toast';
 import { ThemeProvider } from './shared/components/ThemeProvider';
 
-const queryClient = new QueryClient();
+import { queryClient } from './shared/session/sessionManager';
 
 function App() {
   return (
@@ -25,7 +26,9 @@ function App() {
               {/* Page Routing Container */}
               <div className="flex-1 h-full flex flex-col overflow-hidden">
                 <Routes>
-                  <Route path="/" element={<BuilderPage />} />
+                  <Route path="/" element={<Navigate to="/workflows" replace />} />
+                  <Route path="/workflows" element={<WorkflowsPage />} />
+                  <Route path="/workflows/:workflowId" element={<BuilderPage />} />
                   <Route path="/executions" element={<ExecutionsPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/credentials" element={<CredentialsPage />} />

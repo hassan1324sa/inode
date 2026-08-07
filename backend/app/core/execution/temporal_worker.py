@@ -4,7 +4,13 @@ import logging
 from temporalio.worker import Worker
 from app.core.execution.temporal_client import TemporalClientWrapper
 from app.core.execution.workflows import WorkflowOrchestrator
-from app.core.execution.activities import load_execution_context_activity, execute_node_activity
+from app.core.execution.activities import (
+    load_execution_context_activity,
+    execute_node_activity,
+    resolve_loop_items_activity,
+    plan_activity,
+    execute_tool_activity
+)
 from app.core.database import db_manager
 
 # Ensure models are loaded
@@ -35,7 +41,13 @@ async def main():
     logger.info(f"Starting Temporal Worker listening to task queue: {task_queue}")
 
     # Register Workflows and Activities
-    activities = [load_execution_context_activity, execute_node_activity]
+    activities = [
+        load_execution_context_activity,
+        execute_node_activity,
+        resolve_loop_items_activity,
+        plan_activity,
+        execute_tool_activity
+    ]
     
     worker = Worker(
         client,

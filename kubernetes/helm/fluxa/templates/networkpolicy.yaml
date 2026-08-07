@@ -1,0 +1,95 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-deny-all
+  labels:
+    app.kubernetes.io/name: fluxa
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: fluxa
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-dns-egress
+  labels:
+    app.kubernetes.io/name: fluxa
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: fluxa
+  policyTypes:
+    - Egress
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-api-policy
+  labels:
+    app.kubernetes.io/name: fluxa
+    app.kubernetes.io/component: api
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: fluxa
+      app.kubernetes.io/component: api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow ingress on HTTP port from Ingress controller or internal cluster pods
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+  egress:
+    # Allow egress to MongoDB, Temporal, Vault, and OPA
+    - ports:
+        - protocol: TCP
+          port: 27017 # MongoDB
+        - protocol: TCP
+          port: 7233  # Temporal
+        - protocol: TCP
+          port: 8200  # Vault
+        - protocol: TCP
+          port: 8181  # OPA
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-worker-policy
+  labels:
+    app.kubernetes.io/name: fluxa
+    app.kubernetes.io/component: worker
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: fluxa
+      app.kubernetes.io/component: worker
+  policyTypes:
+    - Ingress
+    - Egress
+  # Ingress is empty (deny all ingress)
+  egress:
+    # Allow egress to MongoDB, Temporal, Vault, and OPA
+    - ports:
+        - protocol: TCP
+          port: 27017 # MongoDB
+        - protocol: TCP
+          port: 7233  # Temporal
+        - protocol: TCP
+          port: 8200  # Vault
+        - protocol: TCP
+          port: 8181  # OPA

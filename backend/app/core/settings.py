@@ -10,6 +10,7 @@ class JWTSettings(BaseSettings):
     algorithm: str = Field(default_factory=lambda: os.getenv("JWT_ALGORITHM", "HS256"), validation_alias="JWT_ALGORITHM")
     access_token_expire_minutes: int = Field(default_factory=lambda: int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")), validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES")
     refresh_token_expire_days: int = Field(default_factory=lambda: int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30")), validation_alias="REFRESH_TOKEN_EXPIRE_DAYS")
+    model_config = SettingsConfigDict(extra="ignore")
 
 class DatabaseSettings(BaseSettings):
     mongo_uri: str = Field(default_factory=lambda: os.getenv("MONGO_URI", "mongodb://localhost:27017"), validation_alias="MONGO_URI")
@@ -25,7 +26,7 @@ class Settings(BaseSettings):
     app_name: str = Field(default_factory=lambda: os.getenv("APP_NAME", "Fluxa"), validation_alias="APP_NAME")
     env: str = Field(default_factory=lambda: os.getenv("ENV", "development"), validation_alias="ENV")
     cors_origins: list[str] = Field(
-        default=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"],
+        default_factory=lambda: ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"],
         validation_alias="CORS_ORIGINS"
     )
     
@@ -36,6 +37,45 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    def validate_production_configuration(self):
+        """
+        D.2 Complete Production Configuration Contract Validation (Fail-Closed).
+        Verifies all mandatory production invariants: CORS, JWT secrets & strength,
+        database URI, Temporal host, and debug/development environment parameters.
+        Raises RuntimeError on any invariant violation.
+        """
+        env_val = str(self.env).lower()
+        if env_val in ("production", "prod"):
+            # Invariant 1: Block wildcard or localhost CORS origins in production
+            if not self.cors_origins:
+                raise RuntimeError("D.2 Production Config Violation: CORS_ORIGINS list cannot be empty in ENV=production.")
+            for origin in self.cors_origins:
+                if origin == "*" or "localhost" in origin or "127.0.0.1" in origin:
+                    raise RuntimeError(
+                        f"D.2 Production Config Violation: Unsafe CORS origin '{origin}' configured for ENV=production."
+                    )
+            
+            # Invariant 2: JWT Secret strength and placeholder rejection
+            insecure_placeholders = {
+                "super_secret_key_change_me", "change_me", "secret", "123456",
+                "admin", "password", "default", "fluxa_secret", "jwt_secret_key"
+            }
+            if not self.jwt.secret or self.jwt.secret.lower() in insecure_placeholders:
+                raise RuntimeError("D.2 Production Config Violation: Insecure placeholder JWT_SECRET configured for ENV=production.")
+            if len(self.jwt.secret) < 16:
+                raise RuntimeError("D.2 Production Config Violation: Weak JWT_SECRET (must be at least 16 characters long) for ENV=production.")
+
+            # Invariant 3: Mandatory Database Configuration Check
+            if not self.db.mongo_uri or "localhost" in self.db.mongo_uri or "127.0.0.1" in self.db.mongo_uri:
+                raise RuntimeError("D.2 Production Config Violation: Database MONGO_URI must not point to localhost/127.0.0.1 in ENV=production.")
+            if not self.db.database_name:
+                raise RuntimeError("D.2 Production Config Violation: DATABASE_NAME must be specified for ENV=production.")
+
+            # Invariant 4: Mandatory Temporal Configuration Check
+            if not self.temporal.host or "localhost" in self.temporal.host or "127.0.0.1" in self.temporal.host:
+                raise RuntimeError("D.2 Production Config Violation: TEMPORAL_HOST must not point to localhost/127.0.0.1 in ENV=production.")
+
 settings = Settings()
+settings.validate_production_configuration()
 
 

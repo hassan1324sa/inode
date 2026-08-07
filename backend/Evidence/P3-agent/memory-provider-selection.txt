@@ -1,0 +1,5 @@
+Memory Provider Configurations:
+- LocalInMemoryMemory: Active for ephemeral test suites.
+- LocalChromaMemory: Active for persistent local vector DB runs.
+- Selected Provider: LocalInMemoryMemory
+- Chroma Persistence Directory: ./chroma_db

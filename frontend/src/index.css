@@ -193,15 +193,20 @@
 }
 
 /* Glowing Neon Edge Lines */
-.glowing-edge {
+.react-flow__edge-path {
   filter: drop-shadow(0 0 6px rgba(139, 92, 246, 0.6));
-  stroke-dasharray: 5;
-  animation: flowCable 1s linear infinite;
+  stroke-width: 2.5px !important;
+  stroke: hsl(var(--primary)) !important;
+}
+
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 6;
+  animation: flowCable 0.8s linear infinite;
 }
 
 @keyframes flowCable {
   to {
-    stroke-dashoffset: -10;
+    stroke-dashoffset: -12;
   }
 }
 

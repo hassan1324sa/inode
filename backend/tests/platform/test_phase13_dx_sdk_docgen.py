@@ -16,6 +16,8 @@ from app.dx.docgen import DocumentationGenerator
 from app.cli.main import FluxaCLI
 
 
+# Global bootstrap enabled via conftest.py
+
 def test_sdk_version_compatibility():
     # Valid versions should succeed
     assert validate_server_compatibility(server_version="1.3.0") is True

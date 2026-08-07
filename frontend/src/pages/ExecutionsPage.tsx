@@ -1,12 +1,31 @@
 import React from 'react';
 import * as Icons from 'lucide-react';
 import { useExecutionProjection } from '../features/builder/application/services';
+import { ReplayPanel } from '../features/builder/presentation/components/ReplayPanel';
+import { ExecutionDiff } from '../features/builder/presentation/components/ExecutionDiff';
+import { ExecutionOverlay } from '../features/builder/presentation/components/ExecutionOverlay';
+import { VariableHistoryPanel } from '../features/builder/presentation/components/VariableHistoryPanel';
+import { useExecutionStream } from '../features/builder/presentation/hooks/useExecutionStream';
+import { useVariableHistory } from '../features/builder/presentation/hooks/useVariableHistory';
 
 export const ExecutionsPage: React.FC = () => {
   const { snapshots, activeExecutionId, liveLogs, setActiveExecution } = useExecutionProjection();
+  const [organizationId, setOrganizationId] = React.useState('');
+
+  React.useEffect(() => {
+    fetch('/api/v1/organizations')
+      .then((res) => res.json())
+      .then((orgs) => {
+        const activeOrg = orgs[0] || { slug: 'my-personal-org' };
+        setOrganizationId(activeOrg.slug);
+      })
+      .catch((err) => console.error("Failed to load organization context:", err));
+  }, []);
+
+  const { events, status: wsStatus } = useExecutionStream(activeExecutionId, organizationId);
+  const { variableHistory } = useVariableHistory(events);
 
   const snapshotList = Object.values(snapshots);
-
   const activeSnapshot = activeExecutionId ? snapshots[activeExecutionId] : null;
 
   return (
@@ -76,31 +95,51 @@ export const ExecutionsPage: React.FC = () => {
             </header>
 
             {/* Run details split layout */}
-            <div className="flex-1 flex overflow-hidden p-6 gap-6">
-              {/* Logs panel */}
-              <section className="flex-1 border border-border rounded-lg bg-slate-950/40 p-4 flex flex-col overflow-hidden glass">
-                <div className="flex items-center justify-between pb-3 border-b border-border/50 mb-3">
-                  <span className="text-xs font-bold text-foreground">Terminal Logs</span>
-                  <Icons.Terminal size={14} className="text-muted-foreground" />
-                </div>
-                <div className="flex-1 overflow-y-auto font-mono text-[11px] text-slate-300 space-y-1.5 scrollbar-thin">
-                  {liveLogs.length > 0 ? (
-                    liveLogs.map((log, i) => (
-                      <div key={i} className="flex gap-2">
-                        <span className="text-muted-foreground select-none">[{i + 1}]</span>
-                        <span>{log}</span>
-                      </div>
-                    ))
-                  ) : (
-                    activeSnapshot.logs.map((log, i) => (
-                      <div key={i} className="flex gap-2">
-                        <span className="text-muted-foreground select-none">[{i + 1}]</span>
-                        <span>{log}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </section>
+            <div className="flex-1 flex overflow-hidden p-6 gap-6 relative">
+              {/* Logs & Output left column container */}
+              <div className="flex-1 flex flex-col gap-6 overflow-hidden">
+                {/* Logs panel */}
+                <section className="flex-1 border border-border rounded-lg bg-slate-950/40 p-4 flex flex-col overflow-hidden glass">
+                  <div className="flex items-center justify-between pb-3 border-b border-border/50 mb-3">
+                    <span className="text-xs font-bold text-foreground">Terminal Logs</span>
+                    <Icons.Terminal size={14} className="text-muted-foreground" />
+                  </div>
+                  <div className="flex-1 overflow-y-auto font-mono text-[11px] text-slate-300 space-y-1.5 scrollbar-thin">
+                    {liveLogs.length > 0 ? (
+                      liveLogs.map((log, i) => (
+                        <div key={i} className="flex gap-2">
+                          <span className="text-muted-foreground select-none">[{i + 1}]</span>
+                          <span>{log}</span>
+                        </div>
+                      ))
+                    ) : (
+                      activeSnapshot.logs.map((log, i) => (
+                        <div key={i} className="flex gap-2">
+                          <span className="text-muted-foreground select-none">[{i + 1}]</span>
+                          <span>{log}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+
+                {/* Workflow Output panel */}
+                <section className="h-[200px] border border-border rounded-lg bg-slate-950/40 p-4 flex flex-col overflow-hidden glass">
+                  <div className="flex items-center justify-between pb-2 border-b border-border/50 mb-2">
+                    <span className="text-xs font-bold text-foreground">Workflow Variables & Output</span>
+                    <Icons.Braces size={14} className="text-muted-foreground" />
+                  </div>
+                  <div className="flex-1 overflow-y-auto font-mono text-[11px] text-emerald-400 bg-black/30 p-3 rounded-lg border border-slate-800 scrollbar-thin">
+                    {activeSnapshot.variables && Object.keys(activeSnapshot.variables).length > 0 ? (
+                      <pre className="text-left whitespace-pre-wrap">
+                        {JSON.stringify(activeSnapshot.variables, null, 2)}
+                      </pre>
+                    ) : (
+                      <span className="text-muted-foreground italic">No variables generated in this execution step yet.</span>
+                    )}
+                  </div>
+                </section>
+              </div>
 
               {/* Steps overview panel */}
               <section className="w-[320px] border border-border rounded-lg bg-slate-950/40 p-4 flex flex-col overflow-hidden glass">
@@ -131,6 +170,28 @@ export const ExecutionsPage: React.FC = () => {
                   )}
                 </div>
               </section>
+
+              {/* Debug overlays */}
+              {organizationId && (
+                <>
+                  <ReplayPanel
+                    executionId={activeSnapshot.id}
+                    organizationId={organizationId}
+                    selectedNodeId={activeSnapshot.completedNodes[activeSnapshot.completedNodes.length - 1] || null}
+                  />
+                  <ExecutionDiff
+                    executionId={activeSnapshot.id}
+                    organizationId={organizationId}
+                  />
+                  <ExecutionOverlay
+                    status={wsStatus}
+                    events={events}
+                  />
+                  <VariableHistoryPanel
+                    variableHistory={variableHistory}
+                  />
+                </>
+              )}
             </div>
           </div>
         ) : (

@@ -3,10 +3,11 @@ import * as Icons from 'lucide-react';
 import { useWorkflowProjection } from '../../application/services';
 import { nodeRegistry } from '../../application/services';
 import type { NodePlugin } from '../../domain/plugins/plugin';
+import { CommandBus, UpdateNodePropertyCommand } from '../../application/commands/commandBus';
 
 
 export const PropertyPanel: React.FC = () => {
-  const { selectedNodeId, nodes, updateNodeData } = useWorkflowProjection();
+  const { selectedNodeId, nodes } = useWorkflowProjection();
   const [plugin, setPlugin] = React.useState<NodePlugin | null>(null);
 
   const selectedNode = React.useMemo(() => {
@@ -34,7 +35,7 @@ export const PropertyPanel: React.FC = () => {
   }
 
   const handleFieldChange = (fieldName: string, value: unknown) => {
-    updateNodeData(selectedNode.id, { [fieldName]: value });
+    CommandBus.dispatch(new UpdateNodePropertyCommand(selectedNode.id, { [fieldName]: value }));
   };
 
   return (

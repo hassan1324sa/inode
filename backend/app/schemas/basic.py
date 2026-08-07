@@ -1,5 +1,18 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, List, Dict, Any
+from enum import Enum
+
+class EnvironmentMode(str, Enum):
+    DEVELOPMENT = "Development"
+    STAGING = "Staging"
+    PRODUCTION = "Production"
+
+class OrganizationSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    
+    name: str
+    slug: str
+    environment_mode: EnvironmentMode
 
 class OrganizationCreate(BaseModel):
     name: str
@@ -18,6 +31,15 @@ class UserCreate(BaseModel):
     email: str
     password: str
     name: str
+
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Password cannot be empty")
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long")
+        return v
 
 class UserResponse(BaseModel):
     id: str

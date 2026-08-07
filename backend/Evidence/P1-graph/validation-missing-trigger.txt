@@ -1,0 +1,32 @@
+Input Nodes:
+[
+  {
+    "id": "node-ai",
+    "type": "ai_agent"
+  },
+  {
+    "id": "node-email",
+    "type": "send-email"
+  }
+]
+
+Input Edges:
+[
+  {
+    "source": "node-ai",
+    "target": "node-email",
+    "sourceHandle": "default",
+    "targetHandle": "default"
+  }
+]
+
+→ Validation rule: Trigger presence check
+→ Actual result:
+{
+  "statusCode": 400,
+  "code": "VALIDATION_ERROR",
+  "message": "{'message': 'Trigger check failed', 'errors': ['Workflow must contain exactly one trigger node (none found).']}",
+  "detail": "{'message': 'Trigger check failed', 'errors': ['Workflow must contain exactly one trigger node (none found).']}"
+}
+→ HTTP status: 400
+→ Temporal invocation = NO

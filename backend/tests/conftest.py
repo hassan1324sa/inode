@@ -1,5 +1,7 @@
 import pytest
 import asyncio
+import os
+os.environ["FLUXA_SYSTEM_BOOTSTRAP"] = "true"
 from httpx import AsyncClient
 from mongomock_motor import AsyncMongoMockClient
 from beanie import init_beanie

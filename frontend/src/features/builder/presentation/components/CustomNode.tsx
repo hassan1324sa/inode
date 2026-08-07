@@ -2,12 +2,51 @@ import React from 'react';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import * as Icons from 'lucide-react';
-import { nodeRegistry } from '../../application/services';
+import { nodeRegistry, useWorkflowProjection } from '../../application/services';
 import type { NodePlugin } from '../../domain/plugins/plugin';
+import { CommandBus, UpdateNodePropertyCommand } from '../../application/commands/commandBus';
 
-export const CustomNode: React.FC<NodeProps> = ({ data, selected }) => {
+export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const [plugin, setPlugin] = React.useState<NodePlugin | null>(null);
   const [showTooltip, setShowTooltip] = React.useState(false);
+
+  // States for Agent builder
+  const { } = useWorkflowProjection();
+  const [activeConfigTab, setActiveConfigTab] = React.useState<'chat_model' | 'memory' | 'tool' | null>(null);
+  const [catalog, setCatalog] = React.useState<{ providers: any[]; models: Record<string, any[]> } | null>(null);
+  const [credentialsList, setCredentialsList] = React.useState<{ credential_id: string }[]>([]);
+  const [showAddCredential, setShowAddCredential] = React.useState(false);
+  const [newCredName, setNewCredName] = React.useState('');
+  const [newCredVal, setNewCredVal] = React.useState('');
+  const [allPlugins, setAllPlugins] = React.useState<any[]>([]);
+  const [selectedToolConfigId, setSelectedToolConfigId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (data.type === 'ai_agent') {
+      // Fetch models catalog from backend API
+      fetch('http://localhost:8000/api/v1/debug/models')
+        .then(res => res.json())
+        .then(data => setCatalog(data))
+        .catch(err => console.error(err));
+        
+      // Fetch credentials from backend API
+      fetch('http://localhost:8000/api/v1/debug/credentials')
+        .then(res => res.json())
+        .then(data => setCredentialsList(data.credentials || []))
+        .catch(err => console.error(err));
+
+      // Fetch tool plugins
+      nodeRegistry.getPlugins().then(pluginsMap => {
+        const list: any[] = [];
+        pluginsMap.forEach((p) => {
+          if (p.capabilities && (p.capabilities as any).supports_agent_tool) {
+            list.push(p);
+          }
+        });
+        setAllPlugins(list);
+      });
+    }
+  }, [data.type]);
 
   React.useEffect(() => {
     nodeRegistry.getPlugins().then(plugins => {
@@ -43,20 +82,13 @@ export const CustomNode: React.FC<NodeProps> = ({ data, selected }) => {
 
   return (
     <div
-      className={`relative flex flex-col min-w-[250px] rounded-2xl transition-all duration-200 skeuo-raised skeuo-glare ${ringClass}`}
+      className={`relative flex flex-col min-w-[260px] rounded-xl transition-all duration-200 bg-slate-900/90 border border-slate-700/80 backdrop-blur-md text-foreground ${ringClass}`}
       style={{
         boxShadow: selected
-          ? '0 0 15px rgba(139, 92, 246, 0.4), inset 0 1px 0px rgba(255,255,255,0.15)'
-          : status === 'running'
-          ? '0 0 20px rgba(245, 158, 11, 0.4), inset 0 1px 0px rgba(255,255,255,0.15)'
-          : 'inset 0 1px 0px rgba(255,255,255,0.12), 0 4px 12px rgba(0,0,0,0.5)',
+          ? '0 0 20px rgba(139, 92, 246, 0.25), 0 4px 12px rgba(0,0,0,0.5)'
+          : '0 4px 12px rgba(0,0,0,0.4)',
       }}
     >
-      {/* Decorative Corner Screws */}
-      <div className="absolute top-2 left-2 skeuo-screw z-10" />
-      <div className="absolute top-2 right-2 skeuo-screw z-10" />
-      <div className="absolute bottom-2 left-2 skeuo-screw z-10" />
-      <div className="absolute bottom-2 right-2 skeuo-screw z-10" />
 
       {/* Handles styled as physical port jacks */}
       {!plugin.capabilities.trigger && (
@@ -64,49 +96,85 @@ export const CustomNode: React.FC<NodeProps> = ({ data, selected }) => {
           type="target"
           position={Position.Left}
           style={{
-            background: 'hsl(var(--input))',
-            border: '2.5px solid #7f8c8d',
-            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.9), 0 1px 1px rgba(255,255,255,0.1)',
-            width: 14,
-            height: 14,
-            left: -7,
+            background: 'hsl(var(--background))',
+            border: '2px solid hsl(var(--border))',
+            width: 12,
+            height: 12,
+            left: -6,
           }}
         />
       )}
 
-      <Handle
-        type="source"
-        position={Position.Right}
-        style={{
-          background: 'hsl(var(--input))',
-          border: '2.5px solid #7f8c8d',
-          boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.9), 0 1px 1px rgba(255,255,255,0.1)',
-          width: 14,
-          height: 14,
-          right: -7,
-        }}
-      />
+      {/* If it's a conditional node, render True (top) and False (bottom) source handles on the right */}
+      {plugin.metadata.id === 'if_condition' ? (
+        <>
+          <Handle
+            type="source"
+            id="true"
+            position={Position.Right}
+            style={{
+              background: '#10b981', // emerald green for True
+              border: '2px solid #047857',
+              width: 12,
+              height: 12,
+              right: -6,
+              top: '30%',
+            }}
+          />
+          <Handle
+            type="source"
+            id="false"
+            position={Position.Right}
+            style={{
+              background: '#ef4444', // red for False
+              border: '2px solid #b91c1c',
+              width: 12,
+              height: 12,
+              right: -6,
+              top: '70%',
+            }}
+          />
+        </>
+      ) : (
+        <>
+          <Handle
+            type="source"
+            position={Position.Right}
+            style={{
+              background: 'hsl(var(--background))',
+              border: '2px solid hsl(var(--border))',
+              width: 12,
+              height: 12,
+              right: -6,
+            }}
+          />
+          {plugin.metadata.id === 'ai_agent' && (
+            <>
+              {/* Handles removed in favor of inline config builder */}
+            </>
+          )}
+        </>
+      )}
 
       {/* Header bar */}
       <div
-        className="flex items-center justify-between px-6 py-4 rounded-t-2xl border-b border-black/50"
-        style={{ borderTop: `4px solid ${plugin.color}` }}
+        className="flex items-center justify-between px-4 py-3.5 rounded-t-xl border-b border-slate-800"
+        style={{ borderTop: `3px solid ${plugin.color}` }}
       >
         <div className="flex items-center gap-3">
           <div
-            className="p-2 rounded-lg text-white shadow-lg"
+            className="p-1.5 rounded-lg text-white"
             style={{
               backgroundColor: plugin.color,
-              boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.3), 0 2px 4px rgba(0,0,0,0.3)',
             }}
           >
-            <IconComponent size={16} />
+            <IconComponent size={14} />
           </div>
           <div className="flex flex-col text-left">
-            <span className="font-extrabold text-sm text-foreground skeuo-embossed">
+            <span className="font-semibold text-xs text-slate-100">
               {String(data.label || plugin.metadata.name)}
             </span>
-            <span className="text-[10px] text-muted-foreground font-mono tracking-wider uppercase">
+            <span className="text-[9px] text-muted-foreground font-mono uppercase tracking-wider">
               {plugin.metadata.category}
             </span>
           </div>
@@ -180,14 +248,397 @@ export const CustomNode: React.FC<NodeProps> = ({ data, selected }) => {
             <span className="text-muted-foreground font-mono break-all">{String(data.url || '')}</span>
           </div>
         )}
-        {plugin.metadata.id === 'ai_agent' && (
-          <div className="text-xs flex flex-col gap-1">
-            <span className="text-emerald-400 font-medium text-[10px]">{String(data.model || '')}</span>
-            <p className="text-muted-foreground text-[10px] truncate italic">
-              "{String(data.prompt || '')}"
-            </p>
-          </div>
-        )}
+        {plugin.metadata.id === 'ai_agent' && (() => {
+          const modelObj = data.model && typeof data.model === 'object' ? (data.model as any) : {};
+          const memoryObj = data.memory && typeof data.memory === 'object' ? (data.memory as any) : {};
+          const toolsList = Array.isArray(data.tools) ? data.tools : [];
+
+          const updateModel = (fields: Record<string, any>) => {
+            CommandBus.dispatch(new UpdateNodePropertyCommand(id, {
+              model: {
+                ...modelObj,
+                ...fields
+              }
+            }));
+          };
+
+          const updateMemory = (fields: Record<string, any>) => {
+            CommandBus.dispatch(new UpdateNodePropertyCommand(id, {
+              memory: {
+                ...memoryObj,
+                ...fields
+              }
+            }));
+          };
+
+          const handleAddCredential = () => {
+            if (!newCredName || !newCredVal) return;
+            fetch('http://localhost:8000/api/v1/debug/credentials', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: newCredName,
+                provider: modelObj.provider || 'google',
+                value: newCredVal
+              })
+            })
+              .then(res => res.json())
+              .then(resData => {
+                setCredentialsList(prev => [...prev, { credential_id: resData.credential_id }]);
+                updateModel({ credential_id: resData.credential_id });
+                setNewCredName('');
+                setNewCredVal('');
+                setShowAddCredential(false);
+              })
+              .catch(err => console.error(err));
+          };
+
+          return (
+            <div className="text-xs flex flex-col gap-2.5">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-emerald-400 font-medium text-[10px]">
+                  Model: {modelObj.provider ? `${modelObj.provider.toUpperCase()} / ` : ''}{modelObj.model || 'gemini-1.5-flash'}
+                </span>
+                {modelObj.credential_id && (
+                  <span className="text-[9px] text-slate-400 font-mono">
+                    Credential: {modelObj.credential_id}
+                  </span>
+                )}
+                <p className="text-muted-foreground text-[10px] truncate italic mt-1">
+                  "{String(data.prompt || 'Summarize the input')}"
+                </p>
+              </div>
+
+              {/* Toggles */}
+              <div className="flex justify-between gap-1.5 mt-1 z-20">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setActiveConfigTab(activeConfigTab === 'chat_model' ? null : 'chat_model'); }}
+                  className={`flex-1 text-[9px] font-semibold py-1 px-1 rounded border transition-all duration-150 flex items-center justify-center gap-1 ${
+                    activeConfigTab === 'chat_model'
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+                      : 'bg-slate-800/60 text-slate-300 border-slate-700/60 hover:bg-slate-800 hover:text-emerald-400'
+                  }`}
+                >
+                  <Icons.Cpu size={10} />
+                  <span>Model</span>
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setActiveConfigTab(activeConfigTab === 'memory' ? null : 'memory'); }}
+                  className={`flex-1 text-[9px] font-semibold py-1 px-1 rounded border transition-all duration-150 flex items-center justify-center gap-1 ${
+                    activeConfigTab === 'memory'
+                      ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/50 shadow-[0_0_8px_rgba(99,102,241,0.3)]'
+                      : 'bg-slate-800/60 text-slate-300 border-slate-700/60 hover:bg-slate-800 hover:text-indigo-400'
+                  }`}
+                >
+                  <Icons.Database size={10} />
+                  <span>Memory</span>
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setActiveConfigTab(activeConfigTab === 'tool' ? null : 'tool'); }}
+                  className={`flex-1 text-[9px] font-semibold py-1 px-1 rounded border transition-all duration-150 flex items-center justify-center gap-1 ${
+                    activeConfigTab === 'tool'
+                      ? 'bg-pink-500/20 text-pink-300 border-pink-500/50 shadow-[0_0_8px_rgba(236,72,153,0.3)]'
+                      : 'bg-slate-800/60 text-slate-300 border-slate-700/60 hover:bg-slate-800 hover:text-pink-400'
+                  }`}
+                >
+                  <Icons.Wrench size={10} />
+                  <span>Tools</span>
+                </button>
+              </div>
+
+              {/* Expansions */}
+              {activeConfigTab && (
+                <div className="mt-1 p-2.5 rounded-lg bg-slate-950/90 border border-slate-850 text-xs flex flex-col gap-2.5 z-30 shadow-2xl">
+                  {activeConfigTab === 'chat_model' && (
+                    <>
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                        <span className="font-bold text-[10px] text-emerald-400 flex items-center gap-1">
+                          <Icons.Cpu size={12} /> Chat Model Setup
+                        </span>
+                        <button onClick={() => setActiveConfigTab(null)} className="text-slate-500 hover:text-slate-300">
+                          <Icons.X size={12} />
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-slate-400">PROVIDER</label>
+                        <select
+                          className="w-full bg-slate-900 border border-slate-700/60 rounded px-2 py-1 text-[10px] text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          value={String(modelObj.provider || 'google')}
+                          onChange={(e) => updateModel({ provider: e.target.value, model: catalog?.models[e.target.value]?.[0]?.id || '' })}
+                        >
+                          {catalog?.providers.map((p) => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          )) || (
+                            <>
+                              <option value="google">Google Gemini</option>
+                              <option value="openai">OpenAI</option>
+                              <option value="anthropic">Anthropic</option>
+                              <option value="openrouter">OpenRouter</option>
+                            </>
+                          )}
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-slate-400">MODEL</label>
+                        <input
+                          list="model-options"
+                          type="text"
+                          placeholder="Type or select model..."
+                          className="w-full bg-slate-900 border border-slate-700/60 rounded px-2 py-1 text-[10px] text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          value={String(modelObj.model || '')}
+                          onChange={(e) => updateModel({ model: e.target.value })}
+                        />
+                        <datalist id="model-options">
+                          {(catalog?.models[modelObj.provider || 'google'] || []).map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </datalist>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[9px] font-bold text-slate-400">CREDENTIAL REFERENCE</label>
+                          <button
+                            onClick={() => setShowAddCredential(!showAddCredential)}
+                            className="text-[9px] text-primary hover:underline font-bold"
+                          >
+                            {showAddCredential ? 'Cancel' : '+ Add New'}
+                          </button>
+                        </div>
+
+                        {!showAddCredential ? (
+                          <select
+                            className="w-full bg-slate-900 border border-slate-700/60 rounded px-2 py-1 text-[10px] text-foreground focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            value={String(modelObj.credential_id || '')}
+                            onChange={(e) => updateModel({ credential_id: e.target.value })}
+                          >
+                            <option value="">Select credential...</option>
+                            {credentialsList.map((c) => (
+                              <option key={c.credential_id} value={c.credential_id}>{c.credential_id}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="mt-1 p-2 rounded border border-slate-800 bg-slate-900/60 flex flex-col gap-2">
+                            <input
+                              type="text"
+                              placeholder="Credential Name (e.g. google-key)"
+                              className="w-full bg-slate-950 border border-slate-700/50 rounded px-2 py-1 text-[10px] text-foreground focus:outline-none"
+                              value={newCredName}
+                              onChange={(e) => setNewCredName(e.target.value)}
+                            />
+                            <input
+                              type="password"
+                              placeholder="API Key Secret Value"
+                              className="w-full bg-slate-950 border border-slate-700/50 rounded px-2 py-1 text-[10px] text-foreground focus:outline-none"
+                              value={newCredVal}
+                              onChange={(e) => setNewCredVal(e.target.value)}
+                            />
+                            <button
+                              onClick={handleAddCredential}
+                              className="w-full py-1 bg-primary text-white text-[9px] font-bold rounded"
+                            >
+                              Save Credential to Vault
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {activeConfigTab === 'memory' && (
+                    <>
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                        <span className="font-bold text-[10px] text-indigo-400 flex items-center gap-1">
+                          <Icons.Database size={12} /> Agent Memory Layer
+                        </span>
+                        <button onClick={() => setActiveConfigTab(null)} className="text-slate-500 hover:text-slate-300">
+                          <Icons.X size={12} />
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-slate-400">PROVIDER</label>
+                        <select
+                          className="w-full bg-slate-900 border border-slate-700/60 rounded px-2 py-1 text-[10px] text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          value={String(memoryObj.provider || 'conversation')}
+                          onChange={(e) => updateMemory({ provider: e.target.value })}
+                        >
+                          <option value="none">None</option>
+                          <option value="conversation">Conversation Memory (Chroma)</option>
+                          <option value="postgres">PostgreSQL Memory</option>
+                          <option value="redis">Redis Cache Memory</option>
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] font-bold text-slate-400">MEMORY DYNAMIC KEY</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. customer_{{email}}"
+                          className="w-full bg-slate-900 border border-slate-700/60 rounded px-2 py-1 text-[10px] text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          value={String(memoryObj.key || '')}
+                          onChange={(e) => updateMemory({ key: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="flex gap-2">
+                        <div className="flex-1 flex flex-col gap-1">
+                          <label className="text-[9px] font-bold text-slate-400">SCOPE</label>
+                          <select
+                            className="w-full bg-slate-900 border border-slate-700/60 rounded px-1.5 py-1 text-[10px] text-foreground focus:outline-none"
+                            value={String(memoryObj.scope || 'workflow')}
+                            onChange={(e) => updateMemory({ scope: e.target.value })}
+                          >
+                            <option value="workflow">Workflow</option>
+                            <option value="execution">Execution</option>
+                          </select>
+                        </div>
+                        <div className="flex-1 flex flex-col gap-1">
+                          <label className="text-[9px] font-bold text-slate-400">RETENTION</label>
+                          <select
+                            className="w-full bg-slate-900 border border-slate-700/60 rounded px-1.5 py-1 text-[10px] text-foreground focus:outline-none"
+                            value={String(memoryObj.retention || 'persistent')}
+                            onChange={(e) => updateMemory({ retention: e.target.value })}
+                          >
+                            <option value="persistent">Persistent</option>
+                            <option value="ephemeral">Ephemeral</option>
+                          </select>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {activeConfigTab === 'tool' && (
+                    <>
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                        <span className="font-bold text-[10px] text-pink-400 flex items-center gap-1">
+                          <Icons.Wrench size={12} /> Registered Tools
+                        </span>
+                        <button onClick={() => setActiveConfigTab(null)} className="text-slate-500 hover:text-slate-300">
+                          <Icons.X size={12} />
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col gap-2 max-h-[160px] overflow-y-auto pr-1">
+                        <label className="text-[9px] font-bold text-slate-400 mb-0.5">SELECT ENABLED TOOLS</label>
+                        {allPlugins.map((tool) => {
+                          const isEnabled = toolsList.some((t: any) => t.id === tool.metadata.id);
+                          const toolConfig = toolsList.find((t: any) => t.id === tool.metadata.id) || {};
+                          
+                          const toggleTool = () => {
+                            let nextTools: any[];
+                            if (isEnabled) {
+                              nextTools = toolsList.filter((t: any) => t.id !== tool.metadata.id);
+                              if (selectedToolConfigId === tool.metadata.id) {
+                                setSelectedToolConfigId(null);
+                              }
+                            } else {
+                              nextTools = [...toolsList, { id: tool.metadata.id, credential_id: 'default-key' }];
+                            }
+                            CommandBus.dispatch(new UpdateNodePropertyCommand(id, { tools: nextTools }));
+                          };
+
+                          const ToolIcon = (Icons as any)[tool.icon] || Icons.Wrench;
+
+                          return (
+                            <div key={tool.metadata.id} className="flex flex-col gap-1.5 p-2 rounded bg-slate-900 border border-slate-800">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5 cursor-pointer text-[10px]" onClick={toggleTool}>
+                                  <ToolIcon size={11} className={isEnabled ? 'text-pink-400' : 'text-slate-500'} />
+                                  <span className={isEnabled ? 'text-slate-200 font-medium' : 'text-slate-400'}>{tool.metadata.name}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {isEnabled && (
+                                    <button
+                                      onClick={() => setSelectedToolConfigId(selectedToolConfigId === tool.metadata.id ? null : tool.metadata.id)}
+                                      className={`p-1 rounded transition-colors hover:bg-slate-800 ${
+                                        selectedToolConfigId === tool.metadata.id ? 'text-pink-400' : 'text-slate-400'
+                                      }`}
+                                    >
+                                      <Icons.Settings size={11} />
+                                    </button>
+                                  )}
+                                  <input
+                                    type="checkbox"
+                                    checked={isEnabled}
+                                    onChange={toggleTool}
+                                    className="rounded border-slate-700 bg-slate-900 text-pink-500 focus:ring-0 focus:ring-offset-0 w-3 h-3 cursor-pointer"
+                                  />
+                                </div>
+                              </div>
+                              
+                              {isEnabled && selectedToolConfigId === tool.metadata.id && (
+                                <div className="mt-1 border-t border-slate-800/80 pt-2 flex flex-col gap-2 bg-slate-950/40 p-2 rounded">
+                                  <div className="flex flex-col gap-0.5">
+                                    <label className="text-[8px] font-bold text-slate-500">CREDENTIAL ID</label>
+                                    <select
+                                      className="w-full bg-slate-900 border border-slate-700/60 rounded px-1.5 py-0.5 text-[9px] text-foreground focus:outline-none focus:ring-1 focus:ring-pink-500"
+                                      value={String(toolConfig.credential_id || 'default-key')}
+                                      onChange={(e) => {
+                                        const updated = toolsList.map((t: any) =>
+                                          t.id === tool.metadata.id ? { ...t, credential_id: e.target.value } : t
+                                        );
+                                        CommandBus.dispatch(new UpdateNodePropertyCommand(id, { tools: updated }));
+                                      }}
+                                    >
+                                      <option value="default-key">Default Settings Key</option>
+                                      {credentialsList.map((c) => (
+                                        <option key={c.credential_id} value={c.credential_id}>{c.credential_id}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  
+                                  {tool.metadata.id === 'google_sheets' && (
+                                    <>
+                                      <div className="flex flex-col gap-0.5">
+                                        <label className="text-[8px] font-bold text-slate-500">SPREADSHEET ID</label>
+                                        <input
+                                          type="text"
+                                          placeholder="default_sheet"
+                                          className="w-full bg-slate-900 border border-slate-700/60 rounded px-1.5 py-0.5 text-[9px] text-foreground focus:outline-none focus:ring-1 focus:ring-pink-500"
+                                          value={String(toolConfig.spreadsheet_id || '')}
+                                          onChange={(e) => {
+                                            const updated = toolsList.map((t: any) =>
+                                              t.id === tool.metadata.id ? { ...t, spreadsheet_id: e.target.value } : t
+                                            );
+                                            CommandBus.dispatch(new UpdateNodePropertyCommand(id, { tools: updated }));
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="flex flex-col gap-0.5">
+                                        <label className="text-[8px] font-bold text-slate-500">SHEET NAME / RANGE</label>
+                                        <input
+                                          type="text"
+                                          placeholder="Sheet1"
+                                          className="w-full bg-slate-900 border border-slate-700/60 rounded px-1.5 py-0.5 text-[9px] text-foreground focus:outline-none"
+                                          value={String(toolConfig.range || '')}
+                                          onChange={(e) => {
+                                            const updated = toolsList.map((t: any) =>
+                                              t.id === tool.metadata.id ? { ...t, range: e.target.value } : t
+                                            );
+                                            CommandBus.dispatch(new UpdateNodePropertyCommand(id, { tools: updated }));
+                                          }}
+                                        />
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
         {plugin.metadata.id === 'webhook_trigger' && (
           <div className="text-xs">
             <span className="font-bold text-emerald-400 mr-1.5">{String(data.method || 'POST')}</span>
@@ -198,6 +649,23 @@ export const CustomNode: React.FC<NodeProps> = ({ data, selected }) => {
           <div className="text-xs flex flex-col gap-0.5">
             <span className="text-pink-400 font-mono text-[10px]">{String(data.channel || '#general')}</span>
             <p className="text-muted-foreground text-[10px] truncate">{String(data.message || '')}</p>
+          </div>
+        )}
+        {plugin.metadata.id === 'send-email' && (
+          <div className="text-xs flex flex-col gap-0.5">
+            <span className="text-rose-400 font-mono text-[10px]">{String(data.recipient || '')}</span>
+            <p className="text-muted-foreground text-[10px] truncate">{String(data.subject || '')}</p>
+          </div>
+        )}
+        {plugin.metadata.id === 'read-excel' && (
+          <div className="text-xs flex flex-col gap-0.5">
+            <span className="text-emerald-400 font-mono text-[10px]">Path: {String(data.file_path || '')}</span>
+            <span className="text-muted-foreground text-[10px]">Output: {String(data.output_var || 'rows')}</span>
+          </div>
+        )}
+        {plugin.metadata.id === 'loop' && (
+          <div className="text-xs flex flex-col gap-0.5">
+            <span className="text-amber-400 font-mono text-[10px]">Loop: {String(data.items_var || 'rows')}</span>
           </div>
         )}
         {plugin.metadata.id === 'if_condition' && (
