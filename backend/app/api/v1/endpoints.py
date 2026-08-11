@@ -888,12 +888,17 @@ async def list_packages():
     from app.core.security.context import SecurityContextHolder
     from app.models.organization import Organization
     from app.core.packages import PackageMarketplace
+    from bson import ObjectId
     
     ctx = SecurityContextHolder.get_current_context()
     if not ctx or not ctx.organization_id:
         raise HTTPException(status_code=401, detail="Unauthorized")
-        
-    org = await Organization.find_one(Organization.slug == ctx.organization_id)
+    
+    # ctx.organization_id is a MongoDB ObjectId string — look up by id first, slug as fallback
+    try:
+        org = await Organization.get(ObjectId(ctx.organization_id))
+    except Exception:
+        org = await Organization.find_one(Organization.slug == ctx.organization_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
         
@@ -921,12 +926,16 @@ async def install_package(req_data: InstallRequest):
     from app.core.security.context import SecurityContextHolder
     from app.models.organization import Organization
     from app.core.packages import PackageMarketplace
+    from bson import ObjectId
     
     ctx = SecurityContextHolder.get_current_context()
     if not ctx or not ctx.organization_id:
         raise HTTPException(status_code=401, detail="Unauthorized")
-        
-    org = await Organization.find_one(Organization.slug == ctx.organization_id)
+    
+    try:
+        org = await Organization.get(ObjectId(ctx.organization_id))
+    except Exception:
+        org = await Organization.find_one(Organization.slug == ctx.organization_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
         

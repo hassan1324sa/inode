@@ -86,13 +86,7 @@ class SessionManager {
   }
 
   public getToken(): string | null {
-    let token = this.currentContext.token || localStorage.getItem('fluxa_auth_token');
-    // If token is missing or dummy token from past sessions, reset to valid backend signed token
-    if (!token || token.includes('dummy_sig')) {
-      token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c3Jfc3lzdGVtX2F1ZGl0b3IiLCJvcmdfaWQiOiJvcmctZW50ZXJwcmlzZS0wMSIsIndzX2lkIjoiZGVmYXVsdC13IiwiZW52X2lkIjoiZGVmYXVsdC1lIiwicHJval9pZCI6ImRlZmF1bHQtcCIsImV4cCI6MjEwMTQwMjA2M30.967nDOPZG_VHd1OrJLdXmMtqSID8yPJnC2lKfIhb9l8";
-      localStorage.setItem('fluxa_auth_token', token);
-    }
-    return token;
+    return localStorage.getItem('fluxa_auth_token');
   }
 }
 

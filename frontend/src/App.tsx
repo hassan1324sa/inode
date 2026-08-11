@@ -12,6 +12,18 @@ import { ToastProvider } from './shared/components/Toast';
 import { ThemeProvider } from './shared/components/ThemeProvider';
 
 import { queryClient } from './shared/session/sessionManager';
+import { AuthPage } from './pages/AuthPage';
+import { sessionManager } from './shared/session/sessionManager';
+import { useLocation } from 'react-router-dom';
+
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const token = sessionManager.getToken();
+  const location = useLocation();
+  if (!token) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  return <>{children}</>;
+}
 
 function App() {
   return (
@@ -26,12 +38,13 @@ function App() {
               {/* Page Routing Container */}
               <div className="flex-1 h-full flex flex-col overflow-hidden">
                 <Routes>
+                  <Route path="/login" element={<AuthPage />} />
                   <Route path="/" element={<Navigate to="/workflows" replace />} />
-                  <Route path="/workflows" element={<WorkflowsPage />} />
-                  <Route path="/workflows/:workflowId" element={<BuilderPage />} />
-                  <Route path="/executions" element={<ExecutionsPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="/credentials" element={<CredentialsPage />} />
+                  <Route path="/workflows" element={<RequireAuth><WorkflowsPage /></RequireAuth>} />
+                  <Route path="/workflows/:workflowId" element={<RequireAuth><BuilderPage /></RequireAuth>} />
+                  <Route path="/executions" element={<RequireAuth><ExecutionsPage /></RequireAuth>} />
+                  <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
+                  <Route path="/credentials" element={<RequireAuth><CredentialsPage /></RequireAuth>} />
                   <Route
                     path="*"
                     element={

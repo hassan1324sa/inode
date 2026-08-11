@@ -1,6 +1,7 @@
 import React from 'react';
 import * as Icons from 'lucide-react';
 import { useToast } from '../shared/components/Toast';
+import { authenticatedFetch } from '../shared/api/authenticatedFetch';
 
 export const SettingsPage: React.FC = () => {
   const [orgId, setOrgId] = React.useState('');
@@ -19,14 +20,14 @@ export const SettingsPage: React.FC = () => {
     setError(null);
     try {
       // 1. Get the list of organizations to resolve the active context dynamically
-      const listRes = await fetch('/api/v1/organizations');
+      const listRes = await authenticatedFetch('/api/v1/organizations/');
       if (!listRes.ok) throw new Error('Failed to fetch organization context from server');
       const orgs = await listRes.json();
       
       const activeOrg = orgs[0] || { slug: 'my-personal-org' };
       
       // 2. Fetch detailed settings for the active organization slug/id
-      const detailRes = await fetch(`/api/v1/organizations/${activeOrg.slug}`);
+      const detailRes = await authenticatedFetch(`/api/v1/organizations/${activeOrg.id || activeOrg.slug}`);
       if (!detailRes.ok) throw new Error('Failed to retrieve organization settings');
       const data = await detailRes.json();
       
@@ -55,7 +56,7 @@ export const SettingsPage: React.FC = () => {
 
     setSaving(true);
     try {
-      const res = await fetch(`/api/v1/organizations/${orgId || orgSlug}`, {
+      const res = await authenticatedFetch(`/api/v1/organizations/${orgId || orgSlug}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

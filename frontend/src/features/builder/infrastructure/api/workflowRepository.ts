@@ -3,7 +3,7 @@ import type { WorkflowId } from '../../domain/models/workflow';
 import type { WorkflowRepository } from '../../application/repositories/workflowRepository';
 import type { WorkflowDTO } from '../../../../shared/dto/workflow.dto';
 import { AppError } from '../../../../shared/errors/AppError';
-import { authenticatedFetch } from '../../../../shared/api/authenticatedFetch';
+import { authenticatedFetch, parseApiResponse } from '../../../../shared/api/authenticatedFetch';
 
 export class FetchWorkflowRepository implements WorkflowRepository {
   private backendUrl = '/api/v1';
@@ -135,7 +135,7 @@ export class FetchWorkflowRepository implements WorkflowRepository {
       if (!res.ok) {
         throw AppError.fromHttpResponse(res.status, 'Failed to retrieve workflow list from backend.');
       }
-      const data: WorkflowDTO[] = await res.json();
+      const data: WorkflowDTO[] = await parseApiResponse(res);
       return data.map((dto) => this.mapToDomain(dto));
     } catch (err: any) {
       if (err instanceof AppError) throw err;

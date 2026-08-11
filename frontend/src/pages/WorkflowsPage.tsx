@@ -31,12 +31,34 @@ export const WorkflowsPage: React.FC = () => {
     setError(null);
     try {
       const res = await authenticatedFetch('/api/v1/workflows/');
-      if (!res.ok) throw new Error('Failed to fetch workflows list from server');
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('Your session is not authorized to access workflows.');
+        } else if (res.status === 404) {
+          throw new Error('Workflows endpoint not found.');
+        } else if (res.status >= 500) {
+          throw new Error('Fluxa API returned an internal server error.');
+        }
+        
+        let serverError = '';
+        try {
+          const errorBody = await res.json();
+          serverError = `${errorBody.message || ''} - ${errorBody.detail || ''}`;
+        } catch (e) {}
+
+        throw new Error(`Failed to fetch workflows list from server (Status: ${res.status} ${res.statusText}) ${serverError}`);
+      }
       const data = await res.json();
       setWorkflows(data || []);
     } catch (err: any) {
-      setError(err.message || 'Unable to connect to workflows service.');
-      showToast(err.message || 'Error loading workflows', 'error');
+      const msg = err.message || '';
+      if (msg === 'Failed to fetch' || msg.includes('NetworkError')) {
+        setError('Unable to connect to Fluxa API.');
+        showToast('Unable to connect to Fluxa API.', 'error');
+      } else {
+        setError(msg || 'Unable to connect to workflows service.');
+        showToast(msg || 'Error loading workflows', 'error');
+      }
     } finally {
       setLoading(false);
     }
