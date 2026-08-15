@@ -16,10 +16,11 @@ from app.models.workflow import Workflow
 from app.models.workflow_version import WorkflowVersion
 from app.models.execution import Execution
 from app.models.node_execution import NodeExecution
+from app.models.credential import Credential
 from app.models.enums import ExecutionStatus
 
 from app.api.v1.health import router as health_router
-from app.api.v1.endpoints import auth_router, org_router, wf_router, debug_router, pkg_router
+from app.api.v1.endpoints import auth_router, org_router, wf_router, debug_router, pkg_router, telegram_router
 from app.core.execution.live_debug import LiveExecutionStreamManager
 
 logging.basicConfig(level=logging.INFO)
@@ -42,9 +43,11 @@ class SecurityContextASGIMiddleware:
         "/api/v1/health",
         "/api/v1/auth/register",
         "/api/v1/auth/login",
+        "/api/v1/auth/refresh",
         "/docs",
         "/openapi.json",
         "/redoc",
+        "/api/v1/webhooks/telegram",
     ]
 
     def __init__(self, app):
@@ -168,6 +171,7 @@ async def lifespan(app: FastAPI):
                 WorkflowVersion,
                 Execution,
                 NodeExecution,
+                Credential,
             ]
         )
         logger.info("MongoDB connected and Beanie initialized.")
@@ -301,3 +305,4 @@ app.include_router(org_router, prefix="/api/v1")
 app.include_router(wf_router, prefix="/api/v1")
 app.include_router(debug_router, prefix="/api/v1")
 app.include_router(pkg_router, prefix="/api/v1")
+app.include_router(telegram_router, prefix="/api/v1")

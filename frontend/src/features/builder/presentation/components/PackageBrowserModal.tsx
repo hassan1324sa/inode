@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import * as Icons from 'lucide-react';
 import { useToast } from '../../../../shared/components/Toast';
+import { authenticatedFetch } from '../../../../shared/api/authenticatedFetch';
 
 interface PackageItem {
   id: string;
@@ -27,7 +28,7 @@ export const PackageBrowserModal: React.FC<PackageBrowserModalProps> = ({ isOpen
   const fetchPackages = React.useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/packages/');
+      const res = await authenticatedFetch('/api/v1/packages/');
       if (!res.ok) throw new Error('Failed to load packages');
       const data = await res.json();
       setPackages(data);
@@ -49,7 +50,7 @@ export const PackageBrowserModal: React.FC<PackageBrowserModalProps> = ({ isOpen
   const handleToggleInstall = async (name: string, currentlyInstalled: boolean) => {
     const endpoint = currentlyInstalled ? '/api/v1/packages/uninstall' : '/api/v1/packages/install';
     try {
-      const res = await fetch(endpoint, {
+      const res = await authenticatedFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ package_name: name })

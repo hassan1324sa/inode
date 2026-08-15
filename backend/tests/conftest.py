@@ -13,6 +13,7 @@ from app.models.workflow import Workflow
 from app.models.workflow_version import WorkflowVersion
 from app.models.execution import Execution
 from app.models.node_execution import NodeExecution
+from app.models.credential import Credential
 from unittest.mock import AsyncMock
 
 @pytest.fixture(scope="session")
@@ -37,7 +38,7 @@ def init_db():
         init_beanie(
             database=db,
             document_models=[
-                User, Organization, Workflow, WorkflowVersion, Execution, NodeExecution
+                User, Organization, Workflow, WorkflowVersion, Execution, NodeExecution, Credential
             ]
         )
     )

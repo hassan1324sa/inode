@@ -11,6 +11,33 @@ from app.core.agents.governance import PromptTemplate, PromptRegistry, ModelRout
 from app.core.agents.skills import SkillPackage, SkillManifest
 
 @pytest.fixture(autouse=True)
+def mock_openrouter_calls():
+    from unittest.mock import patch
+    async def mock_generate_resp(self, prompt, system_prompt=None, context=None, target_model=None):
+        text_out = "Solved."
+        json_out = {"is_completed": True, "final_answer": "Processed successfully."}
+        
+        if "ReAct" in (system_prompt or ""):
+            if "executed tool" in prompt:
+                json_out = {"is_completed": True, "final_answer": "Result is correct."}
+            else:
+                json_out = {"tool_name": "sum_tool", "args": {"a": 10, "b": 20}, "thought": "Thinking..."}
+        elif "steps" in prompt:
+            json_out = {
+                "steps": [
+                    {"tool_name": "get_data", "args": {"query": "run"}, "thought": "Init"}
+                ]
+            }
+        return {
+            "text": text_out,
+            "json_data": json_out,
+            "model_used": target_model or "google/gemini-2.5-flash",
+            "cost": 0.0005
+        }
+    with patch("app.core.agents.governance.ModelRouter.generate", mock_generate_resp):
+        yield
+
+@pytest.fixture(autouse=True)
 def clean_registries():
     ToolRegistry.clear()
     PromptRegistry._templates.clear()

@@ -49,6 +49,7 @@ export function AuthPage() {
           const payload = JSON.parse(atob(data.access_token.split('.')[1]));
           sessionManager.setSession({
             token: data.access_token,
+            refreshToken: data.refresh_token || null,
             userId: payload.sub || null,
             organizationId: payload.org_id || null,
           });

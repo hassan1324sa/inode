@@ -93,4 +93,7 @@ NodeContractRegistry.register_contract(NodeContract(node_type="google_sheets", i
 NodeContractRegistry.register_contract(NodeContract(node_type="http_request", input_handles=["default"], output_handles=["default"]))
 NodeContractRegistry.register_contract(NodeContract(node_type="loop", input_handles=["default"], output_handles=["default"]))
 NodeContractRegistry.register_contract(NodeContract(node_type="set_variable", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="telegram_trigger", input_handles=[], output_handles=["default"], is_trigger=True))
+NodeContractRegistry.register_contract(NodeContract(node_type="telegram_send", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="read-email-imap", input_handles=["default"], output_handles=["default"]))
 

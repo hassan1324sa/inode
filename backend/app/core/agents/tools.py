@@ -64,14 +64,45 @@ class NodeBackedTool(BaseTool):
         
         # Instantiate and execute using node execution flow
         executor = executor_cls()
-        # Mocking context, state, services as expected by BaseNodeExecutor subclass
-        from app.core.execution.context import ExecutionState
-        from app.core.services.factory import ExecutionServicesFactory
-        state = ExecutionState()
-        services = ExecutionServicesFactory.create_services()
         
-        result = await executor.execute(args, context, state, services)
-        return result.output_data
+        # Try to resolve default configurations from the active workflow version
+        workflow_node_data = {}
+        try:
+            from app.models.execution import Execution
+            from app.models.workflow_version import WorkflowVersion
+            from bson import ObjectId
+            
+            exec_id = getattr(context, "session_id", None)
+            if exec_id:
+                execution = await Execution.get(ObjectId(exec_id))
+                if execution:
+                    wf_version = await WorkflowVersion.find_one({
+                        "workflow_id": execution.workflow_id,
+                        "version": execution.workflow_version_id
+                    })
+                    if wf_version:
+                        target_node = next((n for n in wf_version.nodes if n.get("type") == self.node_type), None)
+                        if target_node:
+                            workflow_node_data = target_node.get("data", {})
+        except Exception:
+            pass
+
+        from app.core.execution.context import ExecutionContext
+        exec_ctx = ExecutionContext(
+            execution_id=getattr(context, "session_id", "tool_session"),
+            workflow_definition_id="agent_tool",
+            workflow_definition_version=1,
+            tenant_id=getattr(context, "tenant_id", "default_tenant"),
+            variables={},
+            node_outputs={}
+        )
+        
+        node_id = args.get("id", self.node_type)
+        # Merge canvas config defaults with agent dynamic arguments
+        args_with_id = {**workflow_node_data, **args, "id": node_id}
+        
+        result = await executor.execute(args_with_id, exec_ctx)
+        return result.node_outputs.get(node_id, {})
 
 class MCPTool(BaseTool):
     """

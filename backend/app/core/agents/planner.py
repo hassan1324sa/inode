@@ -97,21 +97,51 @@ class ReActPlanner(BasePlanner):
         policy: Any,
         current_plan: Plan
     ) -> PlannerResponse:
-        # Get working memory trace (observations of previous steps)
+        # Fetch working memory trace (observations of previous steps)
         observations = await memory_layer.working_memory.get_observations()
         
+        # Discover and format tool definitions
+        from app.core.agents.tools import ToolRegistry
+        available_tools_desc = []
+        preferred_tools = getattr(policy, "preferred_tools", [])
+        for tool_name in preferred_tools:
+            tool = ToolRegistry.get_tool(tool_name)
+            if tool:
+                available_tools_desc.append({
+                    "name": tool.metadata.name,
+                    "description": tool.metadata.description,
+                    "inputs": tool.metadata.input_schema
+                })
+
+        tools_formatting = json.dumps(available_tools_desc, indent=2) if available_tools_desc else "No tools available."
+
+        system_prompt = (
+            "You are a ReAct agent. You have access to the following tools:\n"
+            f"{tools_formatting}\n\n"
+            "To use a tool, you must respond with a JSON object containing:\n"
+            "{\n"
+            '  "tool_name": "the_name_of_the_tool",\n'
+            '  "args": { ... },\n'
+            '  "thought": "your reasoning step"\n'
+            "}\n\n"
+            "If you have enough information to solve the goal, respond with:\n"
+            "{\n"
+            '  "is_completed": true,\n'
+            '  "final_answer": "your comprehensive final response"\n'
+            "}"
+        )
+
         prompt = (
             f"Goal: {goal}\n"
             f"Previous observations:\n" + "\n".join(observations) + "\n"
-            "Decide the NEXT single step to take. Provide 'tool_name', 'args', and 'thought'. "
-            "If you have enough information to answer, set 'is_completed' to true and fill 'final_answer'."
+            "Decide the NEXT single step to take. Provide 'tool_name', 'args', and 'thought' in the requested JSON format."
         )
 
         cost = 0.0
         if self.model_router:
             response = await self.model_router.generate(
                 prompt=prompt,
-                system_prompt="You are a ReAct agent.",
+                system_prompt=system_prompt,
                 context=context
             )
             cost = response.get("cost", 0.0)

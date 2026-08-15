@@ -85,7 +85,7 @@ export const CredentialsPage: React.FC = () => {
     }
 
     try {
-      const res = await fetch(`/api/v1/debug/credentials/${selectedCredId}`, {
+      const res = await authenticatedFetch(`/api/v1/debug/credentials/${selectedCredId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -112,7 +112,7 @@ export const CredentialsPage: React.FC = () => {
     if (!window.confirm(`Are you sure you want to delete the credential "${id}"?`)) return;
 
     try {
-      const res = await fetch(`/api/v1/debug/credentials/${id}`, {
+      const res = await authenticatedFetch(`/api/v1/debug/credentials/${id}`, {
         method: 'DELETE',
       });
       if (!res.ok) throw new Error('Failed to delete credential');

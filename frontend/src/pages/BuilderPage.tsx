@@ -11,6 +11,7 @@ import { Workflow } from '../features/builder/domain/models/workflow';
 import { useToast } from '../shared/components/Toast';
 import { PackageBrowserModal } from '../features/builder/presentation/components/PackageBrowserModal';
 import { AppError } from '../shared/errors/AppError';
+import TerminalConsole from '../features/builder/presentation/components/TerminalConsole';
 
 
 export const BuilderPage: React.FC = () => {
@@ -105,8 +106,8 @@ export const BuilderPage: React.FC = () => {
     }
     
     try {
-      // 1. Save current workflow changes first via api updates
-      const response = await fetch(`/api/v1/workflows/${workflowId}/execute`, {
+      const { authenticatedFetch } = await import('../shared/api/authenticatedFetch');
+      const response = await authenticatedFetch(`/api/v1/workflows/${workflowId}/execute`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -280,14 +281,19 @@ export const BuilderPage: React.FC = () => {
               </aside>
             )}
 
-            {/* Center: Interactive React Flow Canvas */}
-            <main className="flex-1 h-full relative">
-              <FlowCanvas />
-              {/* Floating shortcut help banner */}
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 border border-black/40 rounded-xl px-3 py-1.5 text-[10px] text-muted-foreground z-10 skeuo-raised">
-                <span className="flex items-center gap-1"><kbd className="bg-muted px-1.5 py-0.5 rounded font-mono">Delete</kbd> Delete node</span>
-                <span className="flex items-center gap-1"><kbd className="bg-muted px-1.5 py-0.5 rounded font-mono">Ctrl+K / Alt+K</kbd> Command palette</span>
+            {/* Center: Interactive React Flow Canvas and Terminal Console */}
+            <main className="flex-1 h-full flex flex-col relative">
+              <div className="flex-1 relative min-h-0">
+                <FlowCanvas />
+                {/* Floating shortcut help banner */}
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 border border-black/40 rounded-xl px-3 py-1.5 text-[10px] text-muted-foreground z-10 skeuo-raised">
+                  <span className="flex items-center gap-1"><kbd className="bg-muted px-1.5 py-0.5 rounded font-mono">Delete</kbd> Delete node</span>
+                  <span className="flex items-center gap-1"><kbd className="bg-muted px-1.5 py-0.5 rounded font-mono">Ctrl+K / Alt+K</kbd> Command palette</span>
+                </div>
               </div>
+              
+              {/* Interactive Skeuomorphic Terminal Console */}
+              <TerminalConsole />
             </main>
 
             {/* Right Side: Properties configuration Panel */}

@@ -8,16 +8,25 @@ interface NodePaletteProps {
   onOpenPackageBrowser?: () => void;
 }
 
-const CATEGORIES = [
-  'All', 'Favorites', 'Recent',
-  'AI', 'Triggers', 'HTTP', 'Communication',
-  'Logic', 'Variables', 'Data', 'Files', 'Utilities', 'Installed Packages'
-];
+interface AccordionSection {
+  id: string;
+  title: string;
+  icon: React.ReactNode;
+  plugins: NodePlugin[];
+}
 
 export const NodePalette: React.FC<NodePaletteProps> = ({ onDragStart, onOpenPackageBrowser }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [plugins, setPlugins] = React.useState<NodePlugin[]>([]);
-  const [selectedCategory, setSelectedCategory] = React.useState('All');
+  const [openSections, setOpenSections] = React.useState<Record<string, boolean>>({
+    favorites: true,
+    triggers: true,
+    ai_logic: true,
+    integrations: false,
+    data_files: false,
+    installed: true,
+  });
+
   const [favorites, setFavorites] = React.useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('fluxa_favorite_nodes') || '[]');
@@ -45,7 +54,6 @@ export const NodePalette: React.FC<NodePaletteProps> = ({ onDragStart, onOpenPac
   };
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
-    // Record in recently used
     setRecent((prev) => {
       const filtered = prev.filter((item) => item !== id);
       const next = [id, ...filtered].slice(0, 8);
@@ -55,14 +63,80 @@ export const NodePalette: React.FC<NodePaletteProps> = ({ onDragStart, onOpenPac
     onDragStart(e, id);
   };
 
-  const filteredPlugins = React.useMemo(() => {
-    return plugins.filter((plugin) => {
-      if (selectedCategory === 'All') return true;
-      if (selectedCategory === 'Favorites') return favorites.includes(plugin.metadata.id);
-      if (selectedCategory === 'Recent') return recent.includes(plugin.metadata.id);
-      return plugin.metadata.category === selectedCategory;
-    });
-  }, [plugins, selectedCategory, favorites, recent]);
+  const toggleSection = (sectionId: string) => {
+    setOpenSections(prev => ({ ...prev, [sectionId]: !prev[sectionId] }));
+  };
+
+  // Group plugins into semantic accordion sections
+  const sections = React.useMemo<AccordionSection[]>(() => {
+    if (searchTerm.trim()) return [];
+
+    const favPlugins = plugins.filter(p => favorites.includes(p.metadata.id));
+    const recentPlugins = plugins.filter(p => recent.includes(p.metadata.id) && !favorites.includes(p.metadata.id));
+    const triggerPlugins = plugins.filter(p => p.capabilities.trigger);
+    const aiLogicPlugins = plugins.filter(p => ['AI', 'Logic'].includes(p.metadata.category) && !p.capabilities.trigger);
+    const integrationPlugins = plugins.filter(p => ['HTTP', 'Communication', 'Utilities'].includes(p.metadata.category) && !p.capabilities.trigger);
+    const dataFilesPlugins = plugins.filter(p => ['Data', 'Files', 'Variables'].includes(p.metadata.category) && !p.capabilities.trigger);
+    const installedPlugins = plugins.filter(p => p.metadata.category === 'Installed Packages');
+
+    const result: AccordionSection[] = [];
+
+    if (favPlugins.length > 0) {
+      result.push({
+        id: 'favorites',
+        title: 'Favorites',
+        icon: <Icons.Star size={14} className="text-amber-400" fill="currentColor" />,
+        plugins: favPlugins,
+      });
+    }
+
+    if (recentPlugins.length > 0) {
+      result.push({
+        id: 'recent',
+        title: 'Recent',
+        icon: <Icons.History size={14} className="text-blue-400" />,
+        plugins: recentPlugins,
+      });
+    }
+
+    result.push(
+      {
+        id: 'triggers',
+        title: 'Triggers',
+        icon: <Icons.Zap size={14} className="text-emerald-400" />,
+        plugins: triggerPlugins,
+      },
+      {
+        id: 'ai_logic',
+        title: 'AI & Core Logic',
+        icon: <Icons.BrainCircuit size={14} className="text-purple-400" />,
+        plugins: aiLogicPlugins,
+      },
+      {
+        id: 'integrations',
+        title: 'HTTP & Integrations',
+        icon: <Icons.Globe size={14} className="text-blue-400" />,
+        plugins: integrationPlugins,
+      },
+      {
+        id: 'data_files',
+        title: 'Data & Files',
+        icon: <Icons.FolderOpen size={14} className="text-amber-500" />,
+        plugins: dataFilesPlugins,
+      }
+    );
+
+    if (installedPlugins.length > 0) {
+      result.push({
+        id: 'installed',
+        title: 'Installed Packages',
+        icon: <Icons.Package size={14} className="text-indigo-400" />,
+        plugins: installedPlugins,
+      });
+    }
+
+    return result;
+  }, [plugins, favorites, recent, searchTerm]);
 
   const highlightText = (text: string, search: string) => {
     if (!search.trim()) return <span>{text}</span>;
@@ -85,103 +159,176 @@ export const NodePalette: React.FC<NodePaletteProps> = ({ onDragStart, onOpenPac
   };
 
   return (
-    <div className="flex flex-col h-full border-r border-border p-3.5 skeuo-raised border-l-0 text-left overflow-hidden">
+    <div className="flex flex-col h-full border-r border-border p-4 bg-card/45 text-left overflow-hidden">
       {/* Title Header */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Icons.PlusSquare className="text-primary" size={18} />
-          <h3 className="font-bold text-sm text-foreground">Node Palette</h3>
+          <Icons.LayoutGrid className="text-primary animate-pulse" size={18} />
+          <h3 className="font-extrabold text-sm text-foreground tracking-tight">Node Palette</h3>
         </div>
         {onOpenPackageBrowser && (
           <button
-            onClick={onOpenPackageBrowser}
-            className="text-[10px] flex items-center gap-1 px-2 py-1 rounded bg-secondary hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-border"
+            onClick={onOpenOpenPackageBrowserHelper(onOpenPackageBrowser)}
+            className="flex items-center gap-1.5 px-2.5 py-1.2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-bold border border-primary/20 hover:border-primary/40 shadow-sm transition-all cursor-pointer"
             title="Browse Packages"
           >
-            <Icons.Package size={12} />
+            <Icons.PackageOpen size={12} />
             <span>Packages</span>
           </button>
         )}
       </div>
 
       {/* Search Bar */}
-      <div className="relative mb-3">
+      <div className="relative mb-4">
         <Icons.Search className="absolute left-3 top-2.5 text-muted-foreground" size={14} />
         <input
           type="text"
-          placeholder="Search nodes..."
-          className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground skeuo-sunken"
+          placeholder="Search nodes & extensions..."
+          className="w-full pl-9 pr-3 py-2 rounded-xl text-xs bg-secondary/40 text-foreground border border-border/40 focus:border-primary/70 focus:outline-none focus:ring-1 focus:ring-primary/30 transition-all placeholder:text-muted-foreground/60 shadow-inner"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
-      </div>
-
-      {/* Category Pills Slider */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-2 scrollbar-none">
-        {CATEGORIES.map((cat) => (
+        {searchTerm && (
           <button
-            key={cat}
-            onClick={() => setSelectedCategory(cat)}
-            className={`px-2.5 py-1 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border ${
-              selectedCategory === cat
-                ? 'bg-primary text-white border-primary shadow-sm'
-                : 'bg-secondary/60 text-muted-foreground border-border/40 hover:text-foreground hover:bg-secondary'
-            }`}
+            onClick={() => setSearchTerm('')}
+            className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
           >
-            {cat}
+            <Icons.X size={13} />
           </button>
-        ))}
+        )}
       </div>
 
-      {/* Nodes List */}
-      <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
-        {filteredPlugins.map((plugin) => {
-          const IconComponent = (Icons as any)[plugin.icon] || Icons.HelpCircle;
-          const isFav = favorites.includes(plugin.metadata.id);
-          return (
-            <div
-              key={plugin.metadata.id}
-              draggable
-              onDragStart={(e) => handleDragStart(e, plugin.metadata.id)}
-              className="flex items-center justify-between p-2.5 rounded-xl cursor-grab active:cursor-grabbing transition-all duration-150 group skeuo-raised hover:border-primary/50"
-            >
-              <div className="flex items-center gap-2.5 overflow-hidden">
-                <div
-                  className="p-1.5 rounded-lg text-white shrink-0 group-hover:scale-105 transition-transform shadow-sm"
-                  style={{ backgroundColor: plugin.color }}
-                >
-                  <IconComponent size={14} />
-                </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="font-bold text-xs text-foreground truncate">
-                    {highlightText(plugin.metadata.name, searchTerm)}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground line-clamp-1">{plugin.metadata.description}</span>
-                </div>
+      {/* Accordion / Flat list container */}
+      <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin">
+        {searchTerm.trim() ? (
+          // Flat list search results
+          <div className="space-y-2">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+              Search Results ({plugins.length})
+            </span>
+            {plugins.map((plugin) => (
+              <NodeItem
+                key={plugin.metadata.id}
+                plugin={plugin}
+                favorites={favorites}
+                onDragStart={handleDragStart}
+                onToggleFavorite={toggleFavorite}
+                highlightText={highlightText}
+                searchTerm={searchTerm}
+              />
+            ))}
+            {plugins.length === 0 && (
+              <div className="text-center py-12 text-muted-foreground text-xs flex flex-col items-center gap-2">
+                <Icons.SearchX size={24} className="opacity-40" />
+                <span>No nodes match your search query.</span>
               </div>
-
-              {/* Favorite toggle button */}
-              <button
-                onClick={(e) => toggleFavorite(plugin.metadata.id, e)}
-                className={`p-1 rounded hover:bg-white/10 transition-colors shrink-0 ${
-                  isFav ? 'text-amber-400' : 'text-muted-foreground/30 hover:text-muted-foreground'
-                }`}
-                title={isFav ? 'Remove from favorites' : 'Add to favorites'}
-              >
-                <Icons.Star size={13} fill={isFav ? 'currentColor' : 'none'} />
-              </button>
-            </div>
-          );
-        })}
-
-        {filteredPlugins.length === 0 && (
-          <div className="text-center py-8 text-xs text-muted-foreground">
-            No nodes found in "{selectedCategory}".
+            )}
           </div>
+        ) : (
+          // Premium Accordion Groups
+          sections.map((sec) => {
+            const isOpen = openSections[sec.id] ?? false;
+            return (
+              <div key={sec.id} className="border border-border/30 rounded-xl bg-secondary/10 overflow-hidden shadow-sm">
+                <button
+                  onClick={() => toggleSection(sec.id)}
+                  className="w-full px-3 py-2.5 flex items-center justify-between bg-secondary/30 hover:bg-secondary/50 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    {sec.icon}
+                    <span className="font-bold text-[11px] text-foreground tracking-wide uppercase">{sec.title}</span>
+                    <span className="text-[9px] px-1.5 py-0.2 bg-card/65 text-muted-foreground border border-border/30 rounded-full font-bold">
+                      {sec.plugins.length}
+                    </span>
+                  </div>
+                  <Icons.ChevronRight
+                    size={14}
+                    className={`text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}
+                  />
+                </button>
+
+                {isOpen && (
+                  <div className="p-2 space-y-2 bg-card/20 border-t border-border/10">
+                    {sec.plugins.map((plugin) => (
+                      <NodeItem
+                        key={plugin.metadata.id}
+                        plugin={plugin}
+                        favorites={favorites}
+                        onDragStart={handleDragStart}
+                        onToggleFavorite={toggleFavorite}
+                        highlightText={highlightText}
+                        searchTerm={searchTerm}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
     </div>
   );
 };
-export default NodePalette;
 
+// Helper to prevent synthetic event issues in react onClick handlers
+const onOpenOpenPackageBrowserHelper = (cb: () => void) => (e: React.MouseEvent) => {
+  e.preventDefault();
+  cb();
+};
+
+interface NodeItemProps {
+  plugin: NodePlugin;
+  favorites: string[];
+  onDragStart: (e: React.DragEvent, id: string) => void;
+  onToggleFavorite: (id: string, e: React.MouseEvent) => void;
+  highlightText: (text: string, search: string) => React.ReactNode;
+  searchTerm: string;
+}
+
+const NodeItem: React.FC<NodeItemProps> = ({
+  plugin,
+  favorites,
+  onDragStart,
+  onToggleFavorite,
+  highlightText,
+  searchTerm,
+}) => {
+  const IconComponent = (Icons as any)[plugin.icon] || Icons.HelpCircle;
+  const isFav = favorites.includes(plugin.metadata.id);
+
+  return (
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, plugin.metadata.id)}
+      className="flex items-center justify-between p-2.5 rounded-xl cursor-grab active:cursor-grabbing bg-card/35 hover:bg-secondary/40 border border-border/20 hover:border-primary/30 transition-all duration-150 group shadow-sm"
+    >
+      <div className="flex items-center gap-2.5 overflow-hidden">
+        <div
+          className="p-1.5 rounded-lg text-white shrink-0 group-hover:scale-105 transition-transform shadow-md"
+          style={{ backgroundColor: plugin.color, boxShadow: `0 2px 6px ${plugin.color}33` }}
+        >
+          <IconComponent size={14} />
+        </div>
+        <div className="flex flex-col min-w-0">
+          <span className="font-bold text-xs text-foreground group-hover:text-primary transition-colors truncate">
+            {highlightText(plugin.metadata.name, searchTerm)}
+          </span>
+          <span className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">{plugin.metadata.description}</span>
+        </div>
+      </div>
+
+      <button
+        onClick={(e) => onToggleFavorite(plugin.metadata.id, e)}
+        className={`p-1 rounded-md hover:bg-secondary transition-colors shrink-0 ${
+          isFav ? 'text-amber-400' : 'text-muted-foreground/30 hover:text-muted-foreground group-hover:opacity-100 opacity-40'
+        }`}
+        title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+      >
+        <Icons.Star size={13} fill={isFav ? 'currentColor' : 'none'} />
+      </button>
+    </div>
+  );
+};
+
+export default NodePalette;

@@ -85,6 +85,21 @@ class VaultSecretProvider(BaseSecretProvider):
         if tenant_path in self._revoked_paths:
             raise SecurityException(f"Access Denied: Secret path {ref.path} has been revoked.")
 
+        # Try to load from MongoDB
+        try:
+            from app.models.credential import Credential
+            cred = await Credential.find_one({
+                "organization_id": ctx.organization_id,
+                "provider": ref.path
+            })
+            if cred:
+                secret_val = decrypt_value(cred.encrypted_data)
+                SecretRedactor.register_secret(secret_val)
+                return secret_val
+        except Exception as e:
+            logging.getLogger("fluxa.secrets").warning(f"Database lookup failed for credential {ref.path}, falling back to memory: {e}")
+
+        # Fallback to in-memory store
         versions = self._store.get(tenant_path)
         if not versions or ref.version not in versions:
             raise ValueError(f"Secret version {ref.version} not found at path {ref.path}")
@@ -103,6 +118,29 @@ class VaultSecretProvider(BaseSecretProvider):
         if tenant_path in self._revoked_paths:
             self._revoked_paths.remove(tenant_path)
 
+        # Store in MongoDB
+        try:
+            from app.models.credential import Credential
+            encrypted_val = encrypt_value(value)
+            
+            cred = await Credential.find_one({
+                "organization_id": ctx.organization_id,
+                "provider": path
+            })
+            if cred:
+                cred.encrypted_data = encrypted_val
+                await cred.save()
+            else:
+                cred = Credential(
+                    organization_id=ctx.organization_id,
+                    provider=path,
+                    encrypted_data=encrypted_val
+                )
+                await cred.insert()
+        except Exception as e:
+            logging.getLogger("fluxa.secrets").warning(f"Database save failed for credential {path}: {e}")
+
+        # Sync to in-memory store
         if tenant_path not in self._store:
             self._store[tenant_path] = {}
         
@@ -120,3 +158,44 @@ class VaultSecretProvider(BaseSecretProvider):
             raise SecurityException("Unauthorized: Missing organization context")
         tenant_path = f"{ctx.organization_id}/{path}"
         self._revoked_paths.add(tenant_path)
+
+        # Delete from MongoDB
+        try:
+            from app.models.credential import Credential
+            cred = await Credential.find_one({
+                "organization_id": ctx.organization_id,
+                "provider": path
+            })
+            if cred:
+                await cred.delete()
+        except Exception as e:
+            logging.getLogger("fluxa.secrets").warning(f"Database deletion failed for credential {path}: {e}")
+
+
+def encrypt_value(value: str) -> str:
+    import base64
+    import hashlib
+    from cryptography.fernet import Fernet
+    from app.core.settings import settings
+    
+    key_material = settings.jwt.secret.encode()
+    derived_key = hashlib.sha256(key_material).digest()
+    fernet_key = base64.urlsafe_b64encode(derived_key)
+    f = Fernet(fernet_key)
+    return f.encrypt(value.encode()).decode()
+
+def decrypt_value(encrypted_value: str) -> str:
+    import base64
+    import hashlib
+    from cryptography.fernet import Fernet
+    from app.core.settings import settings
+    
+    key_material = settings.jwt.secret.encode()
+    derived_key = hashlib.sha256(key_material).digest()
+    fernet_key = base64.urlsafe_b64encode(derived_key)
+    f = Fernet(fernet_key)
+    try:
+        return f.decrypt(encrypted_value.encode()).decode()
+    except Exception:
+        # Fallback to plain text in case of unencrypted entries
+        return encrypted_value

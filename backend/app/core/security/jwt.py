@@ -9,6 +9,8 @@ SECRET_KEY = settings.jwt.secret
 ALGORITHM = settings.jwt.algorithm
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.jwt.access_token_expire_minutes
 
+from typing import Optional, Dict, Any, Tuple
+
 def create_access_token(
     user_id: str,
     organization_id: str,
@@ -31,10 +33,32 @@ def create_access_token(
         "proj_id": project_id,
         "iat": now,
         "exp": expire,
+        "type": "access",
         "jti": str(uuid.uuid4())
     }
     encoded_jwt = jwt.encode(to_encode, settings.jwt.secret, algorithm=settings.jwt.algorithm)
     return encoded_jwt
+
+def create_refresh_token(
+    user_id: str,
+    expires_delta: Optional[timedelta] = None
+) -> Tuple[str, str]:
+    now = datetime.now(timezone.utc)
+    if expires_delta:
+        expire = now + expires_delta
+    else:
+        expire = now + timedelta(days=7)
+    
+    jti = str(uuid.uuid4())
+    to_encode = {
+        "sub": user_id,
+        "type": "refresh",
+        "jti": jti,
+        "iat": now,
+        "exp": expire
+    }
+    encoded_jwt = jwt.encode(to_encode, settings.jwt.secret, algorithm=settings.jwt.algorithm)
+    return encoded_jwt, jti
 
 def decode_access_token(token: str) -> SecurityContext:
     try:
@@ -50,7 +74,10 @@ def decode_access_token(token: str) -> SecurityContext:
         ws_id: str = payload.get("ws_id", "default-w")
         env_id: str = payload.get("env_id", "default-e")
         proj_id: str = payload.get("proj_id", "default-p")
+        token_type: str = payload.get("type")
         
+        if token_type != "access":
+            raise JWTError("Invalid token type for access token")
         if user_id is None or org_id is None:
             raise JWTError("Invalid token payload: missing sub or org_id")
             

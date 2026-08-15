@@ -14,6 +14,7 @@ export interface SessionContext {
   userId: string | null;
   organizationId: string | null;
   token: string | null;
+  refreshToken?: string | null;
 }
 
 class SessionManager {
@@ -21,6 +22,7 @@ class SessionManager {
     userId: null,
     organizationId: null,
     token: null,
+    refreshToken: null,
   };
 
   /**
@@ -42,6 +44,12 @@ class SessionManager {
       localStorage.removeItem('fluxa_auth_token');
     }
 
+    if (newContext.refreshToken) {
+      localStorage.setItem('fluxa_refresh_token', newContext.refreshToken);
+    } else if (newContext.refreshToken === null) {
+      localStorage.removeItem('fluxa_refresh_token');
+    }
+
     if (isContextChanged) {
       this.invalidateWorkspaceData();
     }
@@ -51,8 +59,9 @@ class SessionManager {
    * Clear session on Logout or Auth Failure.
    */
   public clearSession() {
-    this.currentContext = { userId: null, organizationId: null, token: null };
+    this.currentContext = { userId: null, organizationId: null, token: null, refreshToken: null };
     localStorage.removeItem('fluxa_auth_token');
+    localStorage.removeItem('fluxa_refresh_token');
     this.invalidateWorkspaceData();
   }
 
@@ -87,6 +96,17 @@ class SessionManager {
 
   public getToken(): string | null {
     return localStorage.getItem('fluxa_auth_token');
+  }
+
+  public getRefreshToken(): string | null {
+    return localStorage.getItem('fluxa_refresh_token');
+  }
+
+  public setTokens(token: string, refreshToken: string) {
+    this.currentContext.token = token;
+    this.currentContext.refreshToken = refreshToken;
+    localStorage.setItem('fluxa_auth_token', token);
+    localStorage.setItem('fluxa_refresh_token', refreshToken);
   }
 }
 

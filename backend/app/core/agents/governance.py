@@ -52,10 +52,20 @@ class ModelRouter(BaseModel):
             original_id = str(execution_id).replace("replay-", "")
             effect = await MongoDBEventStore.get_effect(original_id, "llm", request_hash)
             if effect:
-                logger.info("Replay matching LLM effect found. Returning cached response.")
+                import logging
+                logging.getLogger("fluxa.governance").info("Replay matching LLM effect found. Returning cached response.")
                 return effect.response.get("output")
             else:
                 raise ValueError("No recorded LLM effect found during replay.")
+
+        # Try to resolve api key if not provided directly
+        api_key = self.openrouter_api_key
+        if not api_key:
+            from app.core.settings import settings
+            api_key = settings.openrouter.api_key
+
+        if not api_key:
+            raise ValueError("OpenRouter API key is missing. Execution fails (Fail-Closed).")
 
         models_to_try = [target_model] if target_model else []
         models_to_try.extend([self.default_model] + self.fallback_models)
@@ -63,71 +73,34 @@ class ModelRouter(BaseModel):
         last_error = None
         for model in models_to_try:
             try:
-                # Actual OpenRouter call if api key is provided
-                if self.openrouter_api_key:
-                    import httpx
-                    headers = {
-                        "Authorization": f"Bearer {self.openrouter_api_key}",
-                        "Content-Type": "application/json"
-                    }
-                    payload = {
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": system_prompt or "You are a helpful assistant."},
-                            {"role": "user", "content": prompt}
-                        ],
-                        "response_format": {"type": "json_object"}
-                    }
-                    async with httpx.AsyncClient() as client:
-                        res = await client.post("https://openrouter.ai/api/v1/chat/completures", json=payload, headers=headers, timeout=30.0)
-                        res.raise_for_status()
-                        result = res.json()
-                        content = result["choices"][0]["message"]["content"]
-                        try:
-                            json_data = json.loads(content)
-                        except Exception:
-                            json_data = {"text": content}
-                        
-                        ret_val = {
-                            "text": content,
-                            "json_data": json_data,
-                            "model_used": model,
-                            "cost": 0.002
-                        }
-                        if execution_id and not is_replay:
-                            from app.core.execution.durable_store import MongoDBEventStore, ExecutionEffect
-                            await MongoDBEventStore.save_effect(
-                                ExecutionEffect(
-                                    execution_id=str(execution_id),
-                                    node_id="llm",
-                                    effect_type="llm",
-                                    provider="model_router",
-                                    request_hash=request_hash,
-                                    response={"output": ret_val}
-                                )
-                            )
-                        return ret_val
-                else:
-                    text_out = "Solved."
-                    json_out = {"is_completed": True, "final_answer": "Processed successfully."}
+                import httpx
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt or "You are a helpful assistant."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "response_format": {"type": "json_object"}
+                }
+                async with httpx.AsyncClient() as client:
+                    res = await client.post("https://openrouter.ai/api/v1/chat/completions", json=payload, headers=headers, timeout=30.0)
+                    res.raise_for_status()
+                    result = res.json()
+                    content = result["choices"][0]["message"]["content"]
+                    try:
+                        json_data = json.loads(content)
+                    except Exception:
+                        json_data = {"text": content}
                     
-                    if "ReAct" in (system_prompt or ""):
-                        if "executed tool" in prompt:
-                            json_out = {"is_completed": True, "final_answer": "Result is correct."}
-                        else:
-                            json_out = {"tool_name": "sum_tool", "args": {"a": 10, "b": 20}, "thought": "Thinking..."}
-                    elif "steps" in prompt:
-                        json_out = {
-                            "steps": [
-                                {"tool_name": "get_data", "args": {"query": "run"}, "thought": "Init"}
-                            ]
-                        }
-
                     ret_val = {
-                        "text": text_out,
-                        "json_data": json_out,
+                        "text": content,
+                        "json_data": json_data,
                         "model_used": model,
-                        "cost": 0.0005
+                        "cost": 0.002
                     }
                     if execution_id and not is_replay:
                         from app.core.execution.durable_store import MongoDBEventStore, ExecutionEffect

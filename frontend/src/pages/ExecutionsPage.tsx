@@ -7,24 +7,32 @@ import { ExecutionOverlay } from '../features/builder/presentation/components/Ex
 import { VariableHistoryPanel } from '../features/builder/presentation/components/VariableHistoryPanel';
 import { useExecutionStream } from '../features/builder/presentation/hooks/useExecutionStream';
 import { useVariableHistory } from '../features/builder/presentation/hooks/useVariableHistory';
-import { authenticatedFetch } from '../shared/api/authenticatedFetch';
+import { sessionManager } from '../shared/session/sessionManager';
+import { authenticatedFetch, parseApiResponse } from '../shared/api/authenticatedFetch';
 
 export const ExecutionsPage: React.FC = () => {
   const { snapshots, activeExecutionId, liveLogs, setActiveExecution } = useExecutionProjection();
   const [organizationId, setOrganizationId] = React.useState('');
 
   React.useEffect(() => {
-    authenticatedFetch('/api/v1/organizations/')
-      .then((res) => res.json())
-      .then((orgs) => {
-        const activeOrg = orgs[0] || { slug: 'my-personal-org' };
-        setOrganizationId(activeOrg.id || activeOrg.slug);
-      })
-      .catch((err) => console.error("Failed to load organization context:", err));
+    const activeOrgId = sessionManager.getSession().organizationId;
+    if (activeOrgId) {
+      setOrganizationId(activeOrgId);
+    } else {
+      // Fallback
+      authenticatedFetch('/api/v1/organizations/')
+        .then((res) => parseApiResponse(res))
+        .then((orgs) => {
+          const activeOrg = orgs[0] || { slug: 'my-personal-org' };
+          setOrganizationId(activeOrg.id || activeOrg.slug);
+        })
+        .catch((err) => console.error("Failed to load organization context:", err));
+    }
   }, []);
 
 
-  const { events, status: wsStatus } = useExecutionStream(activeExecutionId, organizationId);
+  const token = localStorage.getItem('fluxa_auth_token') || undefined;
+  const { events, status: wsStatus } = useExecutionStream(activeExecutionId, organizationId, token);
   const { variableHistory } = useVariableHistory(events);
 
   const snapshotList = Object.values(snapshots);

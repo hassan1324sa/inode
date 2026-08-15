@@ -243,6 +243,33 @@ export class FetchNodeRegistry {
       migrate: (_v, data) => data as any,
     });
 
+    // 5c. Telegram Trigger Node (Triggers)
+    this.plugins.set('telegram_trigger', {
+      metadata: {
+        id: 'telegram_trigger',
+        name: 'Telegram Trigger',
+        category: 'Triggers',
+        description: 'Trigger workflow when a message is received by your Telegram Bot',
+        supportsVersion: 1,
+        minimumEngineVersion: 1,
+        aliases: ['telegram', 'bot', 'chat', 'message'],
+      },
+      capabilities: { trigger: true, async: false, streaming: false, retryable: false, credentialRequired: false },
+      schema: {
+        version: 1,
+        fields: [
+          { name: 'botToken', label: 'Telegram Bot Token ID (Vault)', type: 'secret', required: true, defaultValue: '' },
+          { name: 'allowedChatId', label: 'Allowed Chat ID (Optional)', type: 'text', required: false, defaultValue: '' },
+          { name: 'commandFilter', label: 'Command Filter (e.g. /run) (Optional)', type: 'text', required: false, defaultValue: '' }
+        ],
+      },
+      icon: 'Send',
+      color: '#10B981',
+      defaultData: () => ({ botToken: '', allowedChatId: '', commandFilter: '' }),
+      validate: (data: any) => ({ isValid: !!data?.botToken, errors: data?.botToken ? [] : ['Bot Token is required'] }),
+      migrate: (_v, data) => data as any,
+    });
+
     // 6. Slack Notification Node (Communication)
     this.plugins.set('slack_notification', {
       metadata: {
@@ -431,13 +458,26 @@ export class FetchNodeRegistry {
       schema: {
         version: 1,
         fields: [
-          { name: 'packageName', label: 'Package Name', type: 'text', required: true, defaultValue: '@fluxa/pkg-example' },
+          { name: 'packageName', label: 'Package Name', type: 'text', required: true, defaultValue: '@fluxa/core-extensions' },
+          { name: 'action', label: 'Action / Operation Name', type: 'text', required: true, defaultValue: 'execute' },
+          { name: 'inputs_json', label: 'Inputs / Payload (JSON)', type: 'textarea', required: false, defaultValue: '{}' },
+          { name: 'credentials_ref', label: 'API Credentials Reference ID', type: 'text', required: false, defaultValue: '' }
         ],
       },
       icon: 'Package',
       color: '#8B5CF6',
-      defaultData: () => ({ packageName: '@fluxa/pkg-example' }),
-      validate: (data: any) => ({ isValid: !!data?.packageName, errors: data?.packageName ? [] : ['Package name required'] }),
+      defaultData: () => ({ 
+        packageName: '@fluxa/core-extensions',
+        action: 'execute',
+        inputs_json: '{}',
+        credentials_ref: ''
+      }),
+      validate: (data: any) => {
+        const errors: string[] = [];
+        if (!data?.packageName) errors.push('Package name required');
+        if (!data?.action) errors.push('Action name required');
+        return { isValid: errors.length === 0, errors };
+      },
       migrate: (_v, data) => data as any,
     });
     // 12. Send Email Node (Communication)
@@ -543,6 +583,80 @@ export class FetchNodeRegistry {
       validate: (data: any) => {
         const errors: string[] = [];
         if (!data?.items_var) errors.push('Items Variable is required');
+        return { isValid: errors.length === 0, errors };
+      },
+      migrate: (_v, data) => data as any,
+    });
+
+    // 15. Telegram Send Message Node (Communication)
+    this.plugins.set('telegram_send', {
+      metadata: {
+        id: 'telegram_send',
+        name: 'Send Telegram Message',
+        category: 'Communication',
+        description: 'Send a message to a Telegram chat or group using a bot',
+        supportsVersion: 1,
+        minimumEngineVersion: 1,
+        aliases: ['telegram', 'bot', 'send', 'message'],
+      },
+      capabilities: { trigger: false, async: true, streaming: false, retryable: true, credentialRequired: false },
+      schema: {
+        version: 1,
+        fields: [
+          { name: 'botToken', label: 'Telegram Bot Token ID (Vault)', type: 'secret', required: true, defaultValue: '' },
+          { name: 'chatId', label: 'Chat ID', type: 'text', required: true, defaultValue: '{{telegram_chat_id}}' },
+          { name: 'message', label: 'Message Text', type: 'textarea', required: true, defaultValue: 'Hello from Fluxa!' }
+        ],
+      },
+      icon: 'Send',
+      color: '#10B981',
+      defaultData: () => ({ botToken: '', chatId: '{{telegram_chat_id}}', message: 'Hello from Fluxa!' }),
+      validate: (data: any) => {
+        const errors: string[] = [];
+        const botToken = data?.botToken || data?.botToken_ref;
+        if (!botToken) errors.push('Bot Token is required');
+        const chatId = data?.chatId !== undefined && data?.chatId !== '' ? data.chatId : '{{telegram_chat_id}}';
+        const message = data?.message !== undefined && data?.message !== '' ? data.message : 'Hello from Fluxa!';
+        if (!chatId) errors.push('Chat ID is required');
+        if (!message) errors.push('Message Text is required');
+        return { isValid: errors.length === 0, errors };
+      },
+      migrate: (_v, data) => data as any,
+    });
+
+    // 16. Read Email (IMAP) Node (Communication)
+    this.plugins.set('read-email-imap', {
+      metadata: {
+        id: 'read-email-imap',
+        name: 'Read Email Inbox (IMAP)',
+        category: 'Communication',
+        description: 'Connect to an IMAP server to read recent inbox messages',
+        supportsVersion: 1,
+        minimumEngineVersion: 1,
+        aliases: ['email', 'imap', 'inbox', 'read', 'mail'],
+      },
+      capabilities: { trigger: false, async: true, streaming: false, retryable: true, credentialRequired: false },
+      schema: {
+        version: 1,
+        fields: [
+          { name: 'imapHost', label: 'IMAP Host', type: 'text', required: true, defaultValue: 'imap.gmail.com' },
+          { name: 'imapPort', label: 'IMAP Port', type: 'text', required: true, defaultValue: '993' },
+          { name: 'username', label: 'Username / Email Address', type: 'text', required: true, defaultValue: '' },
+          { name: 'password_ref', label: 'Password ID (Vault)', type: 'secret', required: true, defaultValue: '' },
+          { name: 'folder', label: 'Inbox Folder', type: 'text', required: true, defaultValue: 'INBOX' },
+          { name: 'maxEmails', label: 'Max Emails to Fetch', type: 'text', required: true, defaultValue: '5' }
+        ],
+      },
+      icon: 'Mail',
+      color: '#F43F5E',
+      defaultData: () => ({ imapHost: 'imap.gmail.com', imapPort: '993', username: '', password_ref: '', folder: 'INBOX', maxEmails: '5' }),
+      validate: (data: any) => {
+        const errors: string[] = [];
+        const imapHost = data?.imapHost !== undefined && data?.imapHost !== '' ? data.imapHost : 'imap.gmail.com';
+        if (!imapHost) errors.push('IMAP Host is required');
+        if (!data?.username) errors.push('Username is required');
+        const password = data?.password_ref || data?.password;
+        if (!password) errors.push('Password credential is required');
         return { isValid: errors.length === 0, errors };
       },
       migrate: (_v, data) => data as any,

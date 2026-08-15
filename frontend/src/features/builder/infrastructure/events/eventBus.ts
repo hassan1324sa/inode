@@ -16,10 +16,10 @@ export class ExecutionSession {
     this.onEvent = onEvent;
     this.onCloseCallback = onClose;
   }
-
   public connect(): void {
     console.log(`[ExecutionSession] Connecting WebSocket to stream for execution: ${this.executionId}`);
-    this.socket = new WebSocket(`ws://localhost:8000/api/v1/debug/ws?execution_id=${this.executionId}&tenant_id=tenant-a`);
+    const token = localStorage.getItem('fluxa_auth_token') || '';
+    this.socket = new WebSocket(`ws://localhost:8000/api/v1/debug/ws?execution_id=${this.executionId}&tenant_id=tenant-a&token=${encodeURIComponent(token)}`);
     
     this.socket.onmessage = (event) => {
       try {
@@ -39,8 +39,8 @@ export class ExecutionSession {
           executionId: data.execution_id,
           type: data.event_type === 'NodeStarted' ? 'NODE_STARTED' :
                 data.event_type === 'NodeCompleted' ? 'NODE_COMPLETED' :
-                data.event_type === 'WorkflowCompleted' ? 'WORKFLOW_COMPLETED' :
-                data.event_type === 'WorkflowFailed' ? 'WORKFLOW_FAILED' : data.event_type,
+                data.event_type === 'ExecutionCompleted' || data.event_type === 'WorkflowCompleted' ? 'WORKFLOW_COMPLETED' :
+                data.event_type === 'ExecutionFailed' || data.event_type === 'WorkflowFailed' ? 'WORKFLOW_FAILED' : data.event_type,
           nodeId: data.node_id,
           timestamp: data.timestamp,
           duration: data.payload?.duration || 0,

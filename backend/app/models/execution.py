@@ -15,6 +15,7 @@ class Execution(BaseDocument):
     error: Optional[str] = None
     nodes_snapshot: List[Dict[str, Any]] = []
     edges_snapshot: List[Dict[str, Any]] = []
+    variables: Dict[str, Any] = {}
     metadata: Dict[str, Any] = {}
 
     class Settings:

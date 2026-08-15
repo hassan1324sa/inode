@@ -35,7 +35,26 @@ export const PropertyPanel: React.FC = () => {
   }
 
   const handleFieldChange = (fieldName: string, value: unknown) => {
-    CommandBus.dispatch(new UpdateNodePropertyCommand(selectedNode.id, { [fieldName]: value }));
+    let updates: Record<string, any> = { [fieldName]: value };
+    
+    // Auto-sync nested values for AI Agent
+    if (selectedNode && selectedNode.type === 'ai_agent') {
+      if (fieldName === 'memoryProvider') {
+        const memoryObj = selectedNode.data.memory && typeof selectedNode.data.memory === 'object' ? selectedNode.data.memory : {};
+        updates.memory = { ...memoryObj, provider: value };
+      } else if (fieldName === 'memoryKey') {
+        const memoryObj = selectedNode.data.memory && typeof selectedNode.data.memory === 'object' ? selectedNode.data.memory : {};
+        updates.memory = { ...memoryObj, key: value };
+      } else if (fieldName === 'enabledTools') {
+        const toolNames = typeof value === 'string' ? value.split(',').map(s => s.trim()).filter(Boolean) : [];
+        updates.tools = toolNames.map(name => ({ id: name, credential_id: 'default-key' }));
+      } else if (fieldName === 'apiKey') {
+        const modelObj = selectedNode.data.model && typeof selectedNode.data.model === 'object' ? selectedNode.data.model : {};
+        updates.model = { ...modelObj, credential_id: value };
+      }
+    }
+
+    CommandBus.dispatch(new UpdateNodePropertyCommand(selectedNode.id, updates));
   };
 
   return (
@@ -54,7 +73,28 @@ export const PropertyPanel: React.FC = () => {
       {/* Dynamic Fields */}
       <div className="space-y-4">
         {plugin.schema.fields.map((field) => {
-          const value = selectedNode.data[field.name] !== undefined ? selectedNode.data[field.name] : field.defaultValue || '';
+          let value = selectedNode.data[field.name] !== undefined ? selectedNode.data[field.name] : field.defaultValue || '';
+          
+          // Map nested keys for AI Agent node to keep PropertyPanel and CustomNode in sync
+          if (selectedNode.type === 'ai_agent') {
+            if (field.name === 'memoryProvider') {
+              const memoryObj = selectedNode.data.memory && typeof selectedNode.data.memory === 'object' ? (selectedNode.data.memory as any) : {};
+              value = memoryObj.provider || selectedNode.data.memoryProvider || 'conversation';
+            } else if (field.name === 'memoryKey') {
+              const memoryObj = selectedNode.data.memory && typeof selectedNode.data.memory === 'object' ? (selectedNode.data.memory as any) : {};
+              value = memoryObj.key || selectedNode.data.memoryKey || '';
+            } else if (field.name === 'enabledTools') {
+              const toolsList = Array.isArray(selectedNode.data.tools) ? selectedNode.data.tools : [];
+              if (toolsList.length > 0) {
+                value = toolsList.map((t: any) => t.id).join(',');
+              } else {
+                value = selectedNode.data.enabledTools || '';
+              }
+            } else if (field.name === 'apiKey') {
+              const modelObj = selectedNode.data.model && typeof selectedNode.data.model === 'object' ? (selectedNode.data.model as any) : {};
+              value = modelObj.credential_id || selectedNode.data.apiKey || '';
+            }
+          }
           
           return (
             <div key={field.name} className="flex flex-col gap-1">
@@ -81,19 +121,47 @@ export const PropertyPanel: React.FC = () => {
                 />
               )}
 
-              {field.type === 'select' && (
-                <select
-                  className="w-full rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary skeuo-sunken"
-                  value={value as string}
-                  onChange={(e) => handleFieldChange(field.name, e.target.value)}
-                >
-                  {field.options?.map((opt) => (
-                    <option key={opt.value} value={opt.value} className="bg-slate-900">
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              )}
+              {field.type === 'select' && (() => {
+                let stringValue = '';
+                if (field.name === 'model' && selectedNode.type === 'ai_agent') {
+                  stringValue = typeof value === 'object' && value ? (value as any).model || '' : (value as string);
+                } else {
+                  stringValue = value as string;
+                }
+
+                let selectOptions = field.options || [];
+                if (field.name === 'model' && selectedNode.type === 'ai_agent' && stringValue) {
+                  const hasOption = selectOptions.some(opt => opt.value === stringValue);
+                  if (!hasOption) {
+                    selectOptions = [...selectOptions, { label: stringValue, value: stringValue }];
+                  }
+                }
+
+                return (
+                  <select
+                    className="w-full rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary skeuo-sunken"
+                    value={stringValue}
+                    onChange={(e) => {
+                      if (field.name === 'model' && selectedNode.type === 'ai_agent') {
+                        const modelObj = typeof value === 'object' && value ? (value as any) : {};
+                        handleFieldChange(field.name, {
+                          ...modelObj,
+                          model: e.target.value,
+                          provider: e.target.value.includes('/') ? 'openrouter' : 'google'
+                        });
+                      } else {
+                        handleFieldChange(field.name, e.target.value);
+                      }
+                    }}
+                  >
+                    {selectOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value} className="bg-slate-900">
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                );
+              })()}
 
               {field.type === 'switch' && (
                 <div className="flex items-center">

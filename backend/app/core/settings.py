@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from dotenv import load_dotenv
+from typing import Optional
 import os
 
 load_dotenv()
@@ -22,6 +23,11 @@ class CacheSettings(BaseSettings):
 class TemporalSettings(BaseSettings):
     host: str = Field(default_factory=lambda: os.getenv("TEMPORAL_HOST", "localhost:7233"), validation_alias="TEMPORAL_HOST")
 
+class OpenRouterSettings(BaseSettings):
+    api_key: Optional[str] = Field(default=None, validation_alias="OPENROUTER_API_KEY")
+    base_url: str = Field(default="https://openrouter.ai/api/v1", validation_alias="OPENROUTER_BASE_URL")
+    model_config = SettingsConfigDict(extra="ignore")
+
 class Settings(BaseSettings):
     app_name: str = Field(default_factory=lambda: os.getenv("APP_NAME", "Fluxa"), validation_alias="APP_NAME")
     env: str = Field(default_factory=lambda: os.getenv("ENV", "development"), validation_alias="ENV")
@@ -34,6 +40,7 @@ class Settings(BaseSettings):
     db: DatabaseSettings = DatabaseSettings()
     cache: CacheSettings = CacheSettings()
     temporal: TemporalSettings = TemporalSettings()
+    openrouter: OpenRouterSettings = OpenRouterSettings()
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -74,6 +81,12 @@ class Settings(BaseSettings):
             # Invariant 4: Mandatory Temporal Configuration Check
             if not self.temporal.host or "localhost" in self.temporal.host or "127.0.0.1" in self.temporal.host:
                 raise RuntimeError("D.2 Production Config Violation: TEMPORAL_HOST must not point to localhost/127.0.0.1 in ENV=production.")
+
+        # Always validate OpenRouter key format and fake values regardless of env
+        if self.openrouter.api_key:
+            fake_keys = {"sk-fake", "test-key", "mock-key", "dummy-key", "change-me", "super_secret_key_change_me"}
+            if self.openrouter.api_key.lower() in fake_keys or len(self.openrouter.api_key) < 10:
+                raise RuntimeError("OpenRouter API Key configuration error: Fake or insecure API key detected.")
 
 settings = Settings()
 settings.validate_production_configuration()

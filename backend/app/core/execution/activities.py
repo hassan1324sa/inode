@@ -29,7 +29,7 @@ async def load_execution_context_activity(input_data: Dict[str, Any]) -> Dict[st
         workflow_definition_id=execution.workflow_id,
         workflow_definition_version=1,  # Default version
         tenant_id=execution.organization_id,
-        variables={},
+        variables=execution.variables or {},
         node_outputs={},
         current_node_id=None,
         started_at=execution.started_at or datetime.now(timezone.utc).isoformat(),
@@ -217,7 +217,23 @@ async def plan_activity(input_data: Dict[str, Any]) -> Dict[str, Any]:
     plan = Plan(**plan_dict)
     
     # Setup temporary mock router & memory layer for planning step
-    router = ModelRouter()
+    # Setup actual router with credentials matching context
+    target_model = context_dict.get("default_model") or "google/gemini-2.5-flash"
+    router = ModelRouter(default_model=target_model)
+    
+    # Try to extract the API Key from settings or Vault for the router
+    from app.core.security.secrets import VaultSecretProvider, SecretRef
+    provider = VaultSecretProvider()
+    for default_path in ["openr-router", "openrouter", "openrouter_api_key"]:
+        try:
+            ref = SecretRef(provider="vault", path=default_path, version="1")
+            api_key = await provider.get(ref)
+            if api_key:
+                router.openrouter_api_key = api_key
+                break
+        except Exception:
+            pass
+
     if planner_type == "sequential":
         planner = SequentialPlanner(model_router=router)
     elif planner_type == "plan_and_solve":
@@ -260,4 +276,37 @@ async def execute_tool_activity(input_data: Dict[str, Any]) -> Any:
         args=args,
         context=agent_context
     )
+
+
+@activity.defn(name="complete_execution_activity")
+async def complete_execution_activity(input_data: Dict[str, Any]) -> None:
+    """
+    Updates the parent execution document status in MongoDB.
+    """
+    await factory.ensure_db_connected()
+    
+    execution_id = input_data["execution_id"]
+    status_str = input_data["status"]
+    error_msg = input_data.get("error")
+    
+    execution = await Execution.get(ObjectId(execution_id))
+    if execution:
+        execution.status = ExecutionStatus.COMPLETED if status_str == "completed" else ExecutionStatus.FAILED
+        if error_msg:
+            execution.error = error_msg
+        execution.finished_at = datetime.now(timezone.utc).isoformat()
+        await execution.save()
+        
+        # Publish final execution state changes
+        from app.core.events.event_bus import ExecutionEventBus
+        from app.core.execution.events import ExecutionEvent
+        await ExecutionEventBus.publish(
+            ExecutionEvent(
+                execution_id=execution_id,
+                workflow_id=execution.workflow_id,
+                tenant_id=execution.organization_id,
+                event_type="ExecutionCompleted" if status_str == "completed" else "ExecutionFailed",
+                payload={"status": execution.status.value, "error": error_msg}
+            )
+        )
 

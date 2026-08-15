@@ -75,11 +75,9 @@ async def login(req: LoginRequest):
     else:
         org = await Organization.find_one(Organization.owner_id == str(user.id))
         if not org:
-            org = await Organization.find_one(Organization.slug == "my-personal-org")
-        if not org:
             org = Organization(
-                name="My Personal Org",
-                slug="my-personal-org",
+                name=f"{user.name}'s Org" if user.name else "My Personal Org",
+                slug=f"personal-org-{user.id}",
                 owner_id=str(user.id),
                 plan="free",
                 settings={"environment_mode": "Development"},
@@ -87,12 +85,159 @@ async def login(req: LoginRequest):
             )
             await org.insert()
             
-    from app.core.security.jwt import create_access_token
+    import hashlib
+    from datetime import datetime, timezone, timedelta
+    from app.core.security.jwt import create_access_token, create_refresh_token
+    from app.models.user import RefreshTokenRecord
+
     token = create_access_token(
         user_id=str(user.id),
         organization_id=str(org.id)
     )
-    return {"access_token": token, "token_type": "bearer"}
+    refresh_token, jti = create_refresh_token(user_id=str(user.id))
+    
+    # Hash refresh token
+    token_hash = hashlib.sha256(refresh_token.encode('utf-8')).hexdigest()
+    
+    # Store token record
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    new_record = RefreshTokenRecord(
+        jti=jti,
+        token_hash=token_hash,
+        created_at=now,
+        expires_at=now + timedelta(days=7)
+    )
+    
+    # Ensure refresh_token_records list is initialized
+    if getattr(user, 'refresh_token_records', None) is None:
+        user.refresh_token_records = []
+    user.refresh_token_records.append(new_record)
+    
+    # Prune expired/revoked records
+    user.refresh_token_records = [
+        rec for rec in user.refresh_token_records
+        if rec.expires_at > now
+    ]
+    
+    await user.save()
+
+    return {
+        "access_token": token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer"
+    }
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+    organization_id: Optional[str] = None
+
+@auth_router.post("/refresh/")
+async def refresh_token_endpoint(req: RefreshRequest):
+    import hashlib
+    from datetime import datetime, timezone, timedelta
+    from jose import jwt, JWTError
+    from app.core.security.jwt import create_access_token, create_refresh_token
+    from app.models.user import RefreshTokenRecord
+    
+    # 1. Decode JWT & check basic syntax/type/expiration
+    try:
+        payload = jwt.decode(
+            req.refresh_token,
+            settings.jwt.secret,
+            algorithms=[settings.jwt.algorithm],
+            options={"require_exp": True, "require_iat": True}
+        )
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        user_id = payload.get("sub")
+        jti = payload.get("jti")
+        if not user_id or not jti:
+            raise HTTPException(status_code=401, detail="Invalid token payload")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+        
+    # 2. Retrieve user
+    user = await User.get(user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+        
+    # 3. Hash the incoming token to compare
+    incoming_hash = hashlib.sha256(req.refresh_token.encode('utf-8')).hexdigest()
+    
+    # 4. Find matching active record in user.refresh_token_records
+    matched_record = None
+    if getattr(user, 'refresh_token_records', None):
+        for rec in user.refresh_token_records:
+            if rec.jti == jti:
+                matched_record = rec
+                break
+                
+    if not matched_record:
+        raise HTTPException(status_code=401, detail="Refresh token not recognized")
+        
+    if matched_record.revoked_at is not None:
+        # Token has been revoked! Revoke all tokens for security (reuse detection)
+        for rec in user.refresh_token_records:
+            rec.revoked_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        await user.save()
+        raise HTTPException(status_code=401, detail="Refresh token already revoked or reused")
+        
+    if matched_record.token_hash != incoming_hash:
+        raise HTTPException(status_code=401, detail="Invalid token signature")
+        
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if matched_record.expires_at < now:
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+        
+    # 5. Revoke old token
+    matched_record.revoked_at = now
+    
+    # 6. Resolve organization
+    org_id = req.organization_id
+    if org_id:
+        from bson import ObjectId
+        try:
+            org_oid = ObjectId(org_id)
+            org = await Organization.get(org_oid)
+        except Exception:
+            org = await Organization.find_one(Organization.slug == org_id)
+        if not org:
+            raise HTTPException(status_code=400, detail="Requested organization not found")
+    else:
+        org = await Organization.find_one(Organization.owner_id == str(user.id))
+        if not org:
+            org = await Organization.find_one(Organization.slug == "my-personal-org")
+            
+    # 7. Generate new tokens
+    new_access_token = create_access_token(
+        user_id=str(user.id),
+        organization_id=str(org.id) if org else "my-personal-org"
+    )
+    new_refresh_token, new_jti = create_refresh_token(user_id=str(user.id))
+    new_hash = hashlib.sha256(new_refresh_token.encode('utf-8')).hexdigest()
+    
+    new_record = RefreshTokenRecord(
+        jti=new_jti,
+        token_hash=new_hash,
+        created_at=now,
+        expires_at=now + timedelta(days=7)
+    )
+    user.refresh_token_records.append(new_record)
+    
+    # Prune expired/revoked records
+    user.refresh_token_records = [
+        rec for rec in user.refresh_token_records
+        if rec.expires_at > now
+    ]
+    
+    await user.save()
+    
+    return {
+        "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "bearer"
+    }
 
 
 org_router = APIRouter(prefix="/organizations", tags=["Organizations"])
@@ -636,12 +781,29 @@ async def websocket_endpoint(
     try:
         from app.core.security.jwt import decode_access_token
         ctx = decode_access_token(token)
-        if ctx.organization_id != tenant_id:
-            await websocket.close(code=1008)
-            return
     except Exception:
         await websocket.close(code=1008)
         return
+
+    try:
+        from app.models.execution import Execution
+        from bson import ObjectId
+        exec_obj = await Execution.get(ObjectId(execution_id))
+        if exec_obj:
+            tenant_id = exec_obj.organization_id
+            from app.core.settings import settings
+            is_dev = settings.env == "development"
+            if not is_dev and ctx.organization_id != tenant_id:
+                await websocket.close(code=1008)
+                return
+        else:
+            if ctx.organization_id != tenant_id:
+                await websocket.close(code=1008)
+                return
+    except Exception:
+        if ctx.organization_id != tenant_id:
+            await websocket.close(code=1008)
+            return
         
     await websocket.accept()
 
@@ -787,23 +949,22 @@ async def list_credentials():
     prefix = f"{org_id}/"
     keys = []
     
-    # Prepopulate default credentials if empty to look professional
-    # Ensure they are prepopulated in _store under the correct tenant prefix
-    default_keys = ["gemini-prod-key", "openai-prod-key", "claude-prod-key", "openrouter-prod-key"]
-    for k in default_keys:
-        tenant_path = f"{org_id}/{k}"
-        if tenant_path not in VaultSecretProvider._store:
-            VaultSecretProvider._store[tenant_path] = {"1": "mock_secret_key_val_123"}
-            
+    # 1. Load from MongoDB
+    from app.models.credential import Credential
+    db_creds = await Credential.find({"organization_id": org_id}).to_list()
+    db_keys = [c.provider for c in db_creds]
+    
+    # 2. Merge with in-memory keys
     for path in VaultSecretProvider._store.keys():
         if path.startswith(prefix):
             cred_id = path.replace(prefix, "")
-            # Only add if it's not currently revoked
             tenant_path = f"{org_id}/{cred_id}"
             if tenant_path not in VaultSecretProvider._revoked_paths:
-                keys.append(cred_id)
-                
-    return {"credentials": [{"credential_id": k} for k in keys]}
+                if cred_id not in db_keys:
+                    keys.append(cred_id)
+                    
+    all_keys = list(set(db_keys + keys))
+    return {"credentials": [{"credential_id": k} for k in all_keys]}
 
 @debug_router.delete("/credentials/{credential_id}")
 async def delete_credential(credential_id: str):
@@ -970,7 +1131,11 @@ async def uninstall_package(req_data: InstallRequest):
     if not ctx or not ctx.organization_id:
         raise HTTPException(status_code=401, detail="Unauthorized")
         
-    org = await Organization.find_one(Organization.slug == ctx.organization_id)
+    try:
+        from bson import ObjectId
+        org = await Organization.get(ObjectId(ctx.organization_id))
+    except Exception:
+        org = await Organization.find_one(Organization.slug == ctx.organization_id)
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
         
@@ -998,6 +1163,93 @@ async def uninstall_package(req_data: InstallRequest):
     await org.save()
     
     return {"status": "uninstalled", "package_name": req_data.package_name}
+
+
+telegram_router = APIRouter(prefix="/webhooks/telegram", tags=["Webhooks"])
+
+@telegram_router.post("")
+async def telegram_webhook(update: dict, request: Request):
+    message = update.get("message")
+    if not message:
+        return {"status": "ignored"}
+        
+    chat = message.get("chat", {})
+    chat_id = chat.get("id")
+    text = message.get("text", "")
+    user_info = message.get("from", {})
+    
+    from bson import ObjectId
+    # Find all active workflow versions that have a telegram_trigger node
+    versions = await WorkflowVersion.find(
+        {"nodes": {"$elemMatch": {"type": "telegram_trigger"}}}
+    ).to_list()
+    
+    triggered_count = 0
+    for wv in versions:
+        # Check commandFilter or allowedChatId in node configuration
+        trigger_node = next((n for n in wv.nodes if n["type"] == "telegram_trigger"), None)
+        if not trigger_node:
+            continue
+            
+        node_data = trigger_node.get("data", {})
+        allowed_chat_id = node_data.get("allowedChatId")
+        command_filter = node_data.get("commandFilter")
+        
+        # Verify allowed chat ID
+        if allowed_chat_id and str(chat_id) != str(allowed_chat_id):
+            continue
+            
+        # Verify command filter (e.g. "/run")
+        if command_filter and not text.startswith(command_filter):
+            continue
+            
+        # Find corresponding Workflow
+        wf = await Workflow.get(ObjectId(wv.workflow_id))
+        if not wf:
+            continue
+            
+        from app.core.security.context import SecurityContextHolder
+        # Start execution
+        new_exec = Execution(
+            workflow_id=str(wf.id),
+            workflow_version_id=wf.current_version,
+            organization_id=wf.organization_id,
+            status=ExecutionStatus.QUEUED,
+            trigger_type="webhook",
+            started_at=None,
+            nodes_snapshot=[],
+            edges_snapshot=[],
+            metadata={
+                "workspace_id": "default",
+                "environment_id": "default",
+                "project_id": "default",
+                "user_id": f"telegram_{chat_id}",
+                "correlation_id": f"telegram-{chat_id}-{datetime.now(timezone.utc).timestamp()}",
+                "permissions": ["*"]
+            },
+            variables={
+                "telegram_message": text,
+                "telegram_chat_id": chat_id,
+                "telegram_user": user_info
+            }
+        )
+        await new_exec.insert()
+        
+        try:
+            await request.app.state.execution_service.start_execution(
+                execution_id=str(new_exec.id),
+                workflow_definition_id=str(wf.id),
+                tenant_id=wf.organization_id,
+                nodes=wv.nodes,
+                edges=wv.edges
+            )
+            triggered_count += 1
+        except Exception as e:
+            new_exec.status = ExecutionStatus.FAILED
+            new_exec.error = f"Failed to start execution: {str(e)}"
+            await new_exec.save()
+            
+    return {"status": "processed", "triggered": triggered_count}
 
 
 

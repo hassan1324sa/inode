@@ -8,3 +8,7 @@ from .file_storage import FileStorageNodeExecutor
 from .manual_trigger import ManualTriggerNodeExecutor
 from .google_sheets import GoogleSheetsNodeExecutor
 from .http_request import HTTPRequestNodeExecutor
+from .custom_package_node import CustomPackageExecutor
+from .telegram_send import TelegramSendExecutor
+from .read_email_imap import ReadEmailImapExecutor
+from .telegram_trigger import TelegramTriggerNodeExecutor

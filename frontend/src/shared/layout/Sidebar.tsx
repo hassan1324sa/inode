@@ -1,10 +1,16 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { useUIProjection } from '../../features/builder/application/services';
+import { sessionManager } from '../session/sessionManager';
 
 export const Sidebar: React.FC = () => {
   const { theme, setTheme } = useUIProjection();
+  const location = useLocation();
+
+  if (location.pathname === '/login') {
+    return null;
+  }
 
   const navItems = [
     { name: 'Workflows', path: '/workflows', icon: 'Workflow' },
@@ -57,33 +63,45 @@ export const Sidebar: React.FC = () => {
         </nav>
       </div>
 
-      {/* Footer / Theme Toggle */}
-      <div className="pt-4 border-t border-black/40 flex items-center justify-between">
-        <span className="text-[10px] text-muted-foreground font-mono">v1.0.0</span>
+      {/* Footer / Theme Toggle & Logout */}
+      <div className="pt-4 border-t border-black/40 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-muted-foreground font-mono">v1.0.0</span>
+          <button
+            onClick={() => {
+              const nextTheme = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark';
+              setTheme(nextTheme);
+            }}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground skeuo-btn flex items-center gap-1.5 transition-all"
+            title={`Current Theme: ${theme.toUpperCase()} (click to switch)`}
+          >
+            {theme === 'dark' ? (
+              <>
+                <Icons.Moon size={14} className="text-purple-400" />
+                <span>Dark</span>
+              </>
+            ) : theme === 'light' ? (
+              <>
+                <Icons.Sun size={14} className="text-amber-500" />
+                <span>Light</span>
+              </>
+            ) : (
+              <>
+                <Icons.Monitor size={14} className="text-blue-400" />
+                <span>Auto</span>
+              </>
+            )}
+          </button>
+        </div>
         <button
           onClick={() => {
-            const nextTheme = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark';
-            setTheme(nextTheme);
+            sessionManager.clearSession();
+            window.location.href = '/login';
           }}
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground skeuo-btn flex items-center gap-1.5 transition-all"
-          title={`Current Theme: ${theme.toUpperCase()} (click to switch)`}
+          className="w-full px-3 py-2 rounded-xl text-xs font-bold text-red-400 hover:text-red-300 bg-red-950/10 hover:bg-red-950/20 border border-red-500/10 hover:border-red-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
         >
-          {theme === 'dark' ? (
-            <>
-              <Icons.Moon size={14} className="text-purple-400" />
-              <span>Dark</span>
-            </>
-          ) : theme === 'light' ? (
-            <>
-              <Icons.Sun size={14} className="text-amber-500" />
-              <span>Light</span>
-            </>
-          ) : (
-            <>
-              <Icons.Monitor size={14} className="text-blue-400" />
-              <span>Auto</span>
-            </>
-          )}
+          <Icons.LogOut size={14} />
+          <span>Logout</span>
         </button>
       </div>
     </div>

@@ -9,7 +9,8 @@ from app.core.execution.activities import (
     execute_node_activity,
     resolve_loop_items_activity,
     plan_activity,
-    execute_tool_activity
+    execute_tool_activity,
+    complete_execution_activity
 )
 from app.core.database import db_manager
 
@@ -20,6 +21,7 @@ from app.models.workflow import Workflow
 from app.models.workflow_version import WorkflowVersion
 from app.models.execution import Execution
 from app.models.node_execution import NodeExecution
+from app.models.credential import Credential
 
 # Set up logging configuration
 logging.basicConfig(
@@ -31,7 +33,7 @@ logger = logging.getLogger("fluxa.temporal_worker")
 async def main():
     logger.info("Initializing database connection for worker...")
     await db_manager.connect_db(document_models=[
-        User, Organization, Workflow, WorkflowVersion, Execution, NodeExecution
+        User, Organization, Workflow, WorkflowVersion, Execution, NodeExecution, Credential
     ])
 
     client_wrapper = TemporalClientWrapper()
@@ -46,21 +48,48 @@ async def main():
         execute_node_activity,
         resolve_loop_items_activity,
         plan_activity,
-        execute_tool_activity
+        execute_tool_activity,
+        complete_execution_activity
     ]
     
-    worker = Worker(
-        client,
-        task_queue=task_queue,
-        workflows=[WorkflowOrchestrator],
-        activities=activities
-    )
-    
-    logger.info(f"Worker running on queue '{task_queue}'... Press Ctrl+C to stop.")
-    try:
-        await worker.run()
-    finally:
-        await db_manager.close_db()
+    if task_queue == "fluxa-core":
+        logger.info("Running concurrent workers for 'fluxa-core', 'fluxa-ai', and 'fluxa-http'...")
+        worker_core = Worker(
+            client,
+            task_queue="fluxa-core",
+            workflows=[WorkflowOrchestrator],
+            activities=activities
+        )
+        worker_ai = Worker(
+            client,
+            task_queue="fluxa-ai",
+            activities=activities
+        )
+        worker_http = Worker(
+            client,
+            task_queue="fluxa-http",
+            activities=activities
+        )
+        try:
+            await asyncio.gather(
+                worker_core.run(),
+                worker_ai.run(),
+                worker_http.run()
+            )
+        finally:
+            await db_manager.close_db()
+    else:
+        worker = Worker(
+            client,
+            task_queue=task_queue,
+            workflows=[WorkflowOrchestrator] if task_queue == "fluxa-core" else [],
+            activities=activities
+        )
+        logger.info(f"Worker running on queue '{task_queue}'... Press Ctrl+C to stop.")
+        try:
+            await worker.run()
+        finally:
+            await db_manager.close_db()
 
 if __name__ == "__main__":
     try:

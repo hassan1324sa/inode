@@ -30,7 +30,14 @@ export async function parseApiResponse<T = any>(response: Response): Promise<T> 
   }
   
   if (!response.ok) {
-    const message = data.detail || data.message || `API Error ${response.status}`;
+    let message = data.detail || data.message || `API Error ${response.status}`;
+    if (typeof message === 'object') {
+      if (Array.isArray(message)) {
+        message = message.map((err: any) => err.msg || JSON.stringify(err)).join(', ');
+      } else {
+        message = JSON.stringify(message);
+      }
+    }
     throw new Error(`${message}`);
   }
   
@@ -42,6 +49,35 @@ export async function parseApiResponse<T = any>(response: Response): Promise<T> 
  * 1. Bearer Authorization header if token exists in session
  * 2. Default Content-Type: application/json for POST/PUT requests
  */
+let refreshPromise: Promise<string> | null = null;
+
+async function performRefresh(): Promise<string> {
+  const refreshToken = sessionManager.getRefreshToken();
+  if (!refreshToken) {
+    throw new Error('No refresh token available');
+  }
+
+  const res = await fetch('/api/v1/auth/refresh/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+
+  if (!res.ok) {
+    throw new Error('Refresh request failed');
+  }
+
+  const data = await res.json();
+  if (!data.access_token || !data.refresh_token) {
+    throw new Error('Invalid refresh response payload');
+  }
+
+  sessionManager.setTokens(data.access_token, data.refresh_token);
+  return data.access_token;
+}
+
 export async function authenticatedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const token = sessionManager.getToken();
   const headers = new Headers(init?.headers || {});
@@ -50,14 +86,35 @@ export async function authenticatedFetch(input: RequestInfo | URL, init?: Reques
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(input, {
+  let response = await fetch(input, {
     ...init,
     headers,
   });
 
   if (response.status === 401) {
-    sessionManager.clearSession();
-    window.location.href = '/login';
+    const isRefreshRequest = typeof input === 'string' && input.includes('/auth/refresh/');
+    if (!isRefreshRequest) {
+      try {
+        if (!refreshPromise) {
+          refreshPromise = performRefresh().finally(() => {
+            refreshPromise = null;
+          });
+        }
+        const newAccessToken = await refreshPromise;
+        
+        // Retry the original request with the new access token
+        const retryHeaders = new Headers(init?.headers || {});
+        retryHeaders.set('Authorization', `Bearer ${newAccessToken}`);
+        response = await fetch(input, {
+          ...init,
+          headers: retryHeaders,
+        });
+      } catch (err) {
+        console.error("Token refresh failed, redirecting to login:", err);
+        sessionManager.clearSession();
+        window.location.href = '/login';
+      }
+    }
   }
 
   return response;

@@ -2,9 +2,10 @@ import React from 'react';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import * as Icons from 'lucide-react';
-import { nodeRegistry, useWorkflowProjection } from '../../application/services';
+import { nodeRegistry, useWorkflowProjection, useExecutionProjection } from '../../application/services';
 import type { NodePlugin } from '../../domain/plugins/plugin';
 import { CommandBus, UpdateNodePropertyCommand } from '../../application/commands/commandBus';
+import { authenticatedFetch } from '../../../../shared/api/authenticatedFetch';
 
 export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const [plugin, setPlugin] = React.useState<NodePlugin | null>(null);
@@ -24,15 +25,25 @@ export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   React.useEffect(() => {
     if (data.type === 'ai_agent') {
       // Fetch models catalog from backend API
-      fetch('http://localhost:8000/api/v1/debug/models')
+      authenticatedFetch('/api/v1/debug/models')
         .then(res => res.json())
-        .then(data => setCatalog(data))
+        .then(data => {
+          if (data && data.providers && data.models) {
+            setCatalog(data);
+          } else {
+            console.error('Invalid models response:', data);
+          }
+        })
         .catch(err => console.error(err));
         
       // Fetch credentials from backend API
-      fetch('http://localhost:8000/api/v1/debug/credentials')
+      authenticatedFetch('/api/v1/debug/credentials')
         .then(res => res.json())
-        .then(data => setCredentialsList(data.credentials || []))
+        .then(data => {
+          if (data && data.credentials) {
+            setCredentialsList(data.credentials);
+          }
+        })
         .catch(err => console.error(err));
 
       // Fetch tool plugins
@@ -47,6 +58,12 @@ export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       });
     }
   }, [data.type]);
+
+  // Live Execution status dynamically loaded from EventBus and Execution Projection
+  const activeExecutionId = useExecutionProjection((state: any) => state.activeExecutionId);
+  const activeSnapshot = useExecutionProjection((state: any) => 
+    activeExecutionId ? state.snapshots[activeExecutionId] : null
+  );
 
   React.useEffect(() => {
     nodeRegistry.getPlugins().then(plugins => {
@@ -65,9 +82,32 @@ export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const isValid = validation.isValid;
   const errors = validation.errors || [];
 
-  // Live Execution status from data
-  const status = data.status as 'running' | 'success' | 'failed' | undefined;
-  const duration = data.duration as number | undefined;
+  let status = data.status as 'running' | 'success' | 'failed' | undefined;
+  let duration = data.duration as number | undefined;
+
+  if (activeSnapshot) {
+    // If there is an active execution running
+    if (activeSnapshot.completedNodes.includes(id)) {
+      status = 'success';
+    } else if (activeSnapshot.status === 'Running' && !activeSnapshot.completedNodes.includes(id)) {
+      // If the workflow is running and this node is next or currently active
+      // In eventBus, progress/logs tell us. Let's make it show running if it is the current execution trace last log or in progress
+      const latestLog = activeSnapshot.logs[activeSnapshot.logs.length - 1] || '';
+      if (latestLog.includes(id) || latestLog.includes((data.label as string) || '')) {
+        status = 'running';
+      } else if (activeSnapshot.logs.some((l: string) => l.includes(`Step ${id} started`)) && !activeSnapshot.completedNodes.includes(id)) {
+        status = 'running';
+      }
+    }
+    
+    // Check if the workflow failed on this node
+    if (activeSnapshot.status === 'Failed') {
+      const latestLog = activeSnapshot.logs[activeSnapshot.logs.length - 1] || '';
+      if (latestLog.includes('failed') && (latestLog.includes(id) || latestLog.includes(data.label || ''))) {
+        status = 'failed';
+      }
+    }
+  }
 
   // Visual status classes
   const ringClass = selected
@@ -75,14 +115,14 @@ export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     : status === 'running'
     ? 'ring-2 ring-amber-400 animate-pulse'
     : status === 'failed'
-    ? 'ring-2 ring-red-500/80'
+    ? 'ring-2 ring-red-500/80 shadow-[0_0_15px_rgba(239,68,68,0.5)]'
     : status === 'success'
-    ? 'ring-1 ring-emerald-500/50'
+    ? 'ring-2 ring-emerald-500/60 shadow-[0_0_15px_rgba(16,185,129,0.4)]'
     : '';
 
   return (
     <div
-      className={`relative flex flex-col min-w-[260px] rounded-xl transition-all duration-200 bg-slate-900/90 border border-slate-700/80 backdrop-blur-md text-foreground ${ringClass}`}
+      className={`relative flex flex-col w-[280px] rounded-xl transition-all duration-200 bg-slate-900/90 border border-slate-700/80 backdrop-blur-md text-foreground ${ringClass}`}
       style={{
         boxShadow: selected
           ? '0 0 20px rgba(139, 92, 246, 0.25), 0 4px 12px rgba(0,0,0,0.5)'
@@ -273,7 +313,7 @@ export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
           const handleAddCredential = () => {
             if (!newCredName || !newCredVal) return;
-            fetch('http://localhost:8000/api/v1/debug/credentials', {
+            authenticatedFetch('/api/v1/debug/credentials', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -367,7 +407,7 @@ export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                           value={String(modelObj.provider || 'google')}
                           onChange={(e) => updateModel({ provider: e.target.value, model: catalog?.models[e.target.value]?.[0]?.id || '' })}
                         >
-                          {catalog?.providers.map((p) => (
+                          {catalog?.providers?.map((p: any) => (
                             <option key={p.id} value={p.id}>{p.name}</option>
                           )) || (
                             <>
@@ -391,7 +431,7 @@ export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                           onChange={(e) => updateModel({ model: e.target.value })}
                         />
                         <datalist id="model-options">
-                          {(catalog?.models[modelObj.provider || 'google'] || []).map((m) => (
+                          {((catalog?.models && catalog.models[modelObj.provider || 'google']) || []).map((m: any) => (
                             <option key={m.id} value={m.id}>
                               {m.name}
                             </option>

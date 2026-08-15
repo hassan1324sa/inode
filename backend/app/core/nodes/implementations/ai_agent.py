@@ -42,37 +42,56 @@ class AIAgentNodeExecutor(BaseNodeExecutor):
         router = ModelRouter(default_model=target_model)
         
         node_api_key = ""
+        # Setup fallback SecurityContext for Vault query if missing
+        from app.core.security.context import SecurityContextHolder, SecurityContext, SecurityException
+        try:
+            has_context = SecurityContextHolder.get_current_context() is not None
+        except SecurityException:
+            has_context = False
+
+        if not has_context:
+            SecurityContextHolder.set_context(SecurityContext(
+                organization_id=context.tenant_id or "org-enterprise-01",
+                workspace_id="workspace-1",
+                environment_id="env-1",
+                project_id="proj-1",
+                user_id="system"
+            ))
+
+        from app.core.security.secrets import VaultSecretProvider, SecretRef
+        provider = VaultSecretProvider()
+
+        # Priority 1: Node Specific Credential from Vault
         if credential_id:
             try:
-                from app.core.security.context import SecurityContextHolder, SecurityContext
-                if not SecurityContextHolder.get_current_context():
-                    SecurityContextHolder.set_context(SecurityContext(
-                        organization_id=context.tenant_id or "org-enterprise-01",
-                        workspace_id="workspace-1",
-                        environment_id="env-1",
-                        project_id="proj-1",
-                        user_id="system"
-                    ))
-                from app.core.security.secrets import VaultSecretProvider, SecretRef
-                provider = VaultSecretProvider()
                 ref = SecretRef(provider="vault", path=credential_id, version="1")
                 node_api_key = await provider.get(ref)
             except Exception as e:
                 import logging
-                logging.getLogger("fluxa.ai_agent").warning(f"Could not retrieve credential '{credential_id}' from Vault: {e}")
+                logging.getLogger("fluxa.ai_agent").warning(f"Could not retrieve node credential '{credential_id}' from Vault: {e}")
                 
+        # Priority 2: Tenant/Workspace default Credential from Vault
+        if not node_api_key and context.tenant_id:
+            for default_path in ["openr-router", "openrouter", "openrouter_api_key"]:
+                try:
+                    ref = SecretRef(provider="vault", path=default_path, version="1")
+                    node_api_key = await provider.get(ref)
+                    if node_api_key:
+                        break
+                except Exception:
+                    pass
+
+        # Priority 3: Fallback from Settings / Node configuration
         if not node_api_key:
             node_api_key = node_data.get("apiKey", "")
-            
-        if node_api_key:
-            router.openrouter_api_key = node_api_key
-        else:
+
+        if not node_api_key:
             from app.core.settings import settings
             if hasattr(settings, "openrouter") and hasattr(settings.openrouter, "api_key"):
-                router.openrouter_api_key = settings.openrouter.api_key
-            # If openrouter config is in a database or nested under settings
-            elif hasattr(settings, "openrouter_api_key"):
-                router.openrouter_api_key = settings.openrouter_api_key
+                node_api_key = settings.openrouter.api_key
+
+        if node_api_key:
+            router.openrouter_api_key = node_api_key
             
         # 3. Choose and configure Planner
         planner_type = node_data.get("planner_type", "react").lower()
