@@ -190,7 +190,7 @@ export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           />
           {plugin.metadata.id === 'ai_agent' && (
             <>
-              {/* Handles removed in favor of inline config builder */}
+              {/* Bottom handles are defined in the dedicated bottom bar */}
             </>
           )}
         </>
@@ -270,7 +270,7 @@ export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       </div>
 
       {/* Body preview */}
-      <div className="px-4 py-3 text-left flex flex-col gap-1.5 bg-background/30 rounded-b-lg">
+      <div className={`px-4 py-3 text-left flex flex-col gap-1.5 bg-background/30 ${plugin.metadata.id === 'ai_agent' ? '' : 'rounded-b-lg'}`}>
         {plugin.metadata.id === 'set_variable' && (
           <div className="text-xs">
             <span className="text-muted-foreground">Var: </span>
@@ -293,7 +293,7 @@ export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           const memoryObj = data.memory && typeof data.memory === 'object' ? (data.memory as any) : {};
           const toolsList = Array.isArray(data.tools) ? data.tools : [];
 
-          const updateModel = (fields: Record<string, any>) => {
+          const updateModel = (fields: Record[string, any]) => {
             CommandBus.dispatch(new UpdateNodePropertyCommand(id, {
               model: {
                 ...modelObj,
@@ -302,7 +302,7 @@ export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
             }));
           };
 
-          const updateMemory = (fields: Record<string, any>) => {
+          const updateMemory = (fields: Record[string, any]) => {
             CommandBus.dispatch(new UpdateNodePropertyCommand(id, {
               memory: {
                 ...memoryObj,
@@ -654,7 +654,7 @@ export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                                         <input
                                           type="text"
                                           placeholder="Sheet1"
-                                          className="w-full bg-slate-900 border border-slate-700/60 rounded px-1.5 py-0.5 text-[9px] text-foreground focus:outline-none"
+                                          className="w-full bg-slate-900 border border-slate-700/60 rounded px-1.5 py-0.5 text-[9px] text-foreground focus:outline-none font-sans"
                                           value={String(toolConfig.range || '')}
                                           onChange={(e) => {
                                             const updated = toolsList.map((t: any) =>
@@ -721,6 +721,38 @@ export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           </div>
         )}
       </div>
+
+      {plugin.metadata.id === 'ai_agent' && (
+        <div className="flex justify-between border-t border-slate-800 bg-[#0e1424]/60 px-6 py-2.5 text-[9px] font-mono text-slate-400 rounded-b-xl relative">
+          <div className="flex flex-col items-center gap-0.5 relative">
+            <span className="text-[8px] text-slate-400 font-semibold uppercase tracking-wider">Chat Model*</span>
+            <Handle
+              type="target"
+              id="chat_model"
+              position={Position.Bottom}
+              style={{ background: '#3b82f6', border: '2px solid #1e3a8a', bottom: '-15px', width: 10, height: 10 }}
+            />
+          </div>
+          <div className="flex flex-col items-center gap-0.5 relative">
+            <span className="text-[8px] text-slate-400 font-semibold uppercase tracking-wider">Memory</span>
+            <Handle
+              type="target"
+              id="memory"
+              position={Position.Bottom}
+              style={{ background: '#6366f1', border: '2px solid #312e81', bottom: '-15px', width: 10, height: 10 }}
+            />
+          </div>
+          <div className="flex flex-col items-center gap-0.5 relative">
+            <span className="text-[8px] text-slate-400 font-semibold uppercase tracking-wider">Tool</span>
+            <Handle
+              type="target"
+              id="tool"
+              position={Position.Bottom}
+              style={{ background: '#ec4899', border: '2px solid #831843', bottom: '-15px', width: 10, height: 10 }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
