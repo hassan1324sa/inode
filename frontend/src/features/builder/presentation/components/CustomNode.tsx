@@ -293,7 +293,7 @@ export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           const memoryObj = data.memory && typeof data.memory === 'object' ? (data.memory as any) : {};
           const toolsList = Array.isArray(data.tools) ? data.tools : [];
 
-          const updateModel = (fields: Record[string, any]) => {
+          const updateModel = (fields: any) => {
             CommandBus.dispatch(new UpdateNodePropertyCommand(id, {
               model: {
                 ...modelObj,
@@ -302,7 +302,7 @@ export const CustomNode: React.FC<NodeProps> = ({ id, data, selected }) => {
             }));
           };
 
-          const updateMemory = (fields: Record[string, any]) => {
+          const updateMemory = (fields: any) => {
             CommandBus.dispatch(new UpdateNodePropertyCommand(id, {
               memory: {
                 ...memoryObj,
