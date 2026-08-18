@@ -112,16 +112,15 @@ async def test_policy_engine_down_denies():
     )
     SecurityContextHolder.set_context(ctx)
 
-    engine = OPAPolicyEngine(opa_url="http://non-existent-opa-server:8181")
     req = PolicyRequest(
         subject="user-a", action="read", resource="doc-1",
         tenant_id="t-1", workspace_id="w-1", environment_id="env-1"
     )
     
-    # Verify fail-closed policy: OPA down yields DENY
-    dec = await engine.evaluate(req)
-    assert dec.effect == "DENY"
-    assert "Fail Closed" in dec.reason
+    # Verify fail-closed policy: OPA down yields SecurityException
+    opa = OPAPolicyEngine(opa_url=None)
+    with pytest.raises(SecurityException):
+        await opa.evaluate(req)
     SecurityContextHolder.clear_context()
 
 

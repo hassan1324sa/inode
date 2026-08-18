@@ -86,8 +86,6 @@ class NodeContractRegistry:
 NodeContractRegistry.register_contract(NodeContract(node_type="manual_trigger", input_handles=[], output_handles=["default"], is_trigger=True))
 NodeContractRegistry.register_contract(NodeContract(node_type="conditional", input_handles=["default"], output_handles=["true", "false"]))
 NodeContractRegistry.register_contract(NodeContract(node_type="ai_agent", input_handles=["default"], output_handles=["default"]))
-NodeContractRegistry.register_contract(NodeContract(node_type="send-email", input_handles=["default"], output_handles=["default"]))
-NodeContractRegistry.register_contract(NodeContract(node_type="read-excel", input_handles=["default"], output_handles=["default"]))
 NodeContractRegistry.register_contract(NodeContract(node_type="file_storage", input_handles=["default"], output_handles=["default"]))
 NodeContractRegistry.register_contract(NodeContract(node_type="google_sheets", input_handles=["default"], output_handles=["default"]))
 NodeContractRegistry.register_contract(NodeContract(node_type="http_request", input_handles=["default"], output_handles=["default"]))
@@ -95,5 +93,22 @@ NodeContractRegistry.register_contract(NodeContract(node_type="loop", input_hand
 NodeContractRegistry.register_contract(NodeContract(node_type="set_variable", input_handles=["default"], output_handles=["default"]))
 NodeContractRegistry.register_contract(NodeContract(node_type="telegram_trigger", input_handles=[], output_handles=["default"], is_trigger=True))
 NodeContractRegistry.register_contract(NodeContract(node_type="telegram_send", input_handles=["default"], output_handles=["default"]))
-NodeContractRegistry.register_contract(NodeContract(node_type="read-email-imap", input_handles=["default"], output_handles=["default"]))
 
+# Canonical snake_case names
+NodeContractRegistry.register_contract(NodeContract(node_type="send_email", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="read_excel", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="read_email_imap", input_handles=["default"], output_handles=["default"]))
+
+# Legacy aliases for backward compatibility with existing saved workflows
+NodeContractRegistry.register_contract(NodeContract(node_type="send-email", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="read-excel", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="read-email-imap", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="if_condition", input_handles=["default"], output_handles=["true", "false"]))
+
+# Missing nodes
+NodeContractRegistry.register_contract(NodeContract(node_type="custom_package_node", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="webhook_trigger", input_handles=[], output_handles=["default"], is_trigger=True))
+NodeContractRegistry.register_contract(NodeContract(node_type="schedule_trigger", input_handles=[], output_handles=["default"], is_trigger=True))
+NodeContractRegistry.register_contract(NodeContract(node_type="slack_notification", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="transform_json", input_handles=["default"], output_handles=["default"]))
+NodeContractRegistry.register_contract(NodeContract(node_type="delay_timer", input_handles=["default"], output_handles=["default"]))

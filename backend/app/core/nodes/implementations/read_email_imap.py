@@ -74,7 +74,7 @@ def _fetch_emails_sync(host: str, port: int, username: str, password: str, folde
             pass
     return fetched_emails
 
-@NodeExecutorRegistry.register("read-email-imap")
+@NodeExecutorRegistry.register("read_email_imap")
 class ReadEmailImapExecutor(BaseNodeExecutor):
     """
     Node executor to connect to an IMAP server and fetch recent emails.
@@ -134,12 +134,8 @@ class ReadEmailImapExecutor(BaseNodeExecutor):
         except Exception as e:
             import logging
             logger = logging.getLogger("fluxa.read_email_imap")
-            logger.warning(f"IMAP connection or read failed: {str(e)}. Proceeding with empty emails list fallback to prevent workflow hang.")
-            context.node_outputs[node_id] = {
-                "status": "warning",
-                "emails": [],
-                "count": 0
-            }
+            logger.error(f"IMAP connection or read failed: {str(e)}")
+            raise e
 
         return context
 

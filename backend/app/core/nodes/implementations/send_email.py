@@ -11,7 +11,7 @@ from app.core.execution.durable_store import MongoDBEventStore, ExecutionEffect
 
 logger = logging.getLogger("fluxa.send_email_node")
 
-@NodeExecutorRegistry.register("send-email")
+@NodeExecutorRegistry.register("send_email")
 class SendEmailNodeExecutor(BaseNodeExecutor):
     """
     Sends email via SMTP. Integrates with VaultSecretProvider for password credentials
@@ -27,7 +27,9 @@ class SendEmailNodeExecutor(BaseNodeExecutor):
         data_sub = node_data.get("data", {})
         smtp_host = node_data.get("smtp_host") or data_sub.get("smtp_host") or "localhost"
         smtp_port = int(node_data.get("smtp_port") or data_sub.get("smtp_port") or 1025)
-        username = node_data.get("username") or data_sub.get("username") or "sender@example.com"
+        username = node_data.get("username") or data_sub.get("username")
+        if not username:
+            raise ValueError("Send Email Node: username (sender) is required.")
         
         recipient_raw = node_data.get("recipient") or data_sub.get("recipient")
         # Resolve recipient dynamically if template-based, e.g. "{{current_row.email}}"
@@ -39,10 +41,7 @@ class SendEmailNodeExecutor(BaseNodeExecutor):
             recipient = row.get("email")
             
         if not recipient:
-            recipient = context.variables.get("telegram_user", {}).get("username") or "demo@example.com"
-            if "@" not in str(recipient):
-                recipient = "demo@example.com"
-            
+            raise ValueError("Send Email Node: recipient is required.")
         subject_raw = node_data.get("subject") or data_sub.get("subject") or "Notification"
         subject = VariableResolver.resolve(subject_raw, context.variables, context.node_outputs)
         
@@ -144,13 +143,6 @@ class SendEmailNodeExecutor(BaseNodeExecutor):
                 
         except Exception as e:
             logger.error(f"Failed to send email: {e}")
-            # If it is an authentication failure, sender refusal or TLS error, do not fail-stop the demo workflow run
-            err_str = str(e).lower()
-            if "authentication failed" in err_str or "unacceptable" in err_str or "accepted" in err_str or "refused" in err_str or "gsmtp" in err_str or "tls" in err_str:
-                logger.warning(f"SMTP authentication/TLS failed: {e}. Node completed with warning fallback to prevent workflow failure.")
-                output = {"status": "warning_smtp_failed", "error": str(e), "recipient": recipient}
-                context.node_outputs[node_data.get("id", "send-email")] = output
-                return context
             raise e
             
         return context

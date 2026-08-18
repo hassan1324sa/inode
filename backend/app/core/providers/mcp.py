@@ -58,13 +58,8 @@ class MCPClientDriver:
         if self._tool_handler:
             return await self._tool_handler(tool_name, arguments)
         
-        # Default mock execution if no handler provided
-        return {
-            "status": "success",
-            "server": self.server_url,
-            "tool": tool_name,
-            "arguments": arguments
-        }
+        safe_url = redact_url(self.server_url)
+        raise RuntimeError(f"No tool handler configured for MCP tool '{tool_name}' on server {safe_url}")
 
 class MCPProviderManager:
     """

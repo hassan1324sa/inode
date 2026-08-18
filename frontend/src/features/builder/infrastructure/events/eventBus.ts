@@ -19,7 +19,31 @@ export class ExecutionSession {
   public connect(): void {
     console.log(`[ExecutionSession] Connecting WebSocket to stream for execution: ${this.executionId}`);
     const token = localStorage.getItem('fluxa_auth_token') || '';
-    this.socket = new WebSocket(`ws://localhost:8000/api/v1/debug/ws?execution_id=${this.executionId}&tenant_id=tenant-a&token=${encodeURIComponent(token)}`);
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    
+    let orgId = '';
+    try {
+      if (token) {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (payload.org_id) orgId = payload.org_id;
+      }
+    } catch (e) {
+      console.warn('Failed to parse token for org_id');
+    }
+    
+    if (!orgId) {
+      console.error('[ExecutionSession] Cannot connect: Missing organization ID in authentication token.');
+      this.onEvent({
+        id: `sys-err-${Date.now()}`,
+        executionId: this.executionId,
+        type: 'WORKFLOW_FAILED',
+        timestamp: new Date().toISOString(),
+        error: 'Missing organization ID context. Cannot stream execution events.'
+      });
+      return;
+    }
+    
+    this.socket = new WebSocket(`${wsProtocol}//${window.location.host}/api/v1/debug/ws?execution_id=${this.executionId}&tenant_id=${orgId}&token=${encodeURIComponent(token)}`);
     
     this.socket.onmessage = (event) => {
       try {

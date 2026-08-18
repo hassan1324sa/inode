@@ -33,7 +33,8 @@ async def clean_automation_state():
 @pytest.mark.anyio
 async def test_e2e_excel_to_email_automation():
     # 1. Create a temporary CSV file
-    temp_csv_path = "temp_customers.csv"
+    import tempfile
+    temp_csv_path = os.path.join(tempfile.gettempdir(), "temp_customers.csv")
     with open(temp_csv_path, mode="w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["name", "email", "sales", "last_order", "status"])
@@ -55,8 +56,8 @@ async def test_e2e_excel_to_email_automation():
     # 3. Build the E2E Workflow structure
     read_excel_node = {
         "id": "read-excel-1",
-        "type": "read-excel",
-        "file_path": temp_csv_path,
+        "type": "read_excel",
+        "file_path": "temp_customers.csv",
         "output_var": "customers"
     }
     
@@ -74,7 +75,7 @@ async def test_e2e_excel_to_email_automation():
             },
             {
                 "id": "send-email-1",
-                "type": "send-email",
+                "type": "send_email",
                 "if_condition": "variables.last_condition_result",
                 "recipient": "current_row.email",
                 "subject": "Offer for {current_row.name}",

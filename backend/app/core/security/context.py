@@ -8,9 +8,9 @@ class SecurityException(Exception):
 
 class SecurityContext(BaseModel):
     organization_id: str
-    workspace_id: str
-    environment_id: str
-    project_id: str
+    workspace_id: Optional[str] = None
+    environment_id: Optional[str] = None
+    project_id: Optional[str] = None
     user_id: str
     correlation_id: Optional[str] = None
     permissions: list[str] = Field(default_factory=list)

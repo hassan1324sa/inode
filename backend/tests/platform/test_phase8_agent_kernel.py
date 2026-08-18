@@ -23,9 +23,10 @@ def mock_openrouter_calls():
             else:
                 json_out = {"tool_name": "sum_tool", "args": {"a": 10, "b": 20}, "thought": "Thinking..."}
         elif "steps" in prompt:
+            tool_name = "evaluate_branch" if "Explore 3 possible branches" in prompt else "get_data"
             json_out = {
                 "steps": [
-                    {"tool_name": "get_data", "args": {"query": "run"}, "thought": "Init"}
+                    {"tool_name": tool_name, "args": {"query": "run"}, "thought": "Macro step 1"}
                 ]
             }
         return {

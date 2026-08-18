@@ -35,23 +35,31 @@ class HTTPRequestNodeExecutor(BaseNodeExecutor):
             headers = dict(headers_input)
 
         # 2. Execute Async Request using SSRFSafeTransport
-        async with httpx.AsyncClient(transport=SSRFSafeTransport(), timeout=15.0) as client:
+        MAX_PAYLOAD_SIZE = 5 * 1024 * 1024 # 5 MB
+        async with httpx.AsyncClient(transport=SSRFSafeTransport(), timeout=10.0) as client:
             try:
-                response = await client.request(
+                request = client.build_request(
                     method=method,
                     url=url,
                     headers=headers,
                     content=body if isinstance(body, (str, bytes)) else None,
                     json=body if isinstance(body, dict) else None
                 )
-                
-                # Check status
-                response.raise_for_status()
-                
+                async with client.stream(request.method, request.url, headers=request.headers, content=request.content) as response:
+                    response.raise_for_status()
+                    
+                    # Read in chunks to enforce size limit
+                    response_bytes = bytearray()
+                    async for chunk in response.aiter_bytes(chunk_size=65536):
+                        response_bytes.extend(chunk)
+                        if len(response_bytes) > MAX_PAYLOAD_SIZE:
+                            raise SecurityException("HTTP Request blocked: Response payload exceeds 5MB limit.")
+                    
+                import json
                 try:
-                    res_payload = response.json()
+                    res_payload = json.loads(response_bytes.decode('utf-8'))
                 except Exception:
-                    res_payload = response.text
+                    res_payload = response_bytes.decode('utf-8', errors='replace')
 
                 # Store output in ExecutionContext
                 node_id = node_data.get("id", "http_node")

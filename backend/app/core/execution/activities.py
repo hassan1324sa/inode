@@ -89,12 +89,27 @@ async def execute_node_activity(input_data: Dict[str, Any]) -> Dict[str, Any]:
         raise SecurityException("Access Denied: Missing organization identity in worker task (Fail Closed).")
         
     meta = context.metadata or {}
+    
+    workspace_id = meta.get("workspace_id")
+    environment_id = meta.get("environment_id")
+    project_id = meta.get("project_id")
+    user_id = meta.get("user_id")
+    
+    if not workspace_id:
+        raise SecurityException("Access Denied: Missing workspace identity in worker task (Fail Closed).")
+    if not environment_id:
+        raise SecurityException("Access Denied: Missing environment identity in worker task (Fail Closed).")
+    if not project_id:
+        raise SecurityException("Access Denied: Missing project identity in worker task (Fail Closed).")
+    if not user_id:
+        raise SecurityException("Access Denied: Missing user identity in worker task (Fail Closed).")
+
     ctx = SecurityContext(
         organization_id=context.tenant_id,
-        workspace_id=meta.get("workspace_id", "default"),
-        environment_id=meta.get("environment_id", "default"),
-        project_id=meta.get("project_id", "default"),
-        user_id=meta.get("user_id", "system"),
+        workspace_id=workspace_id,
+        environment_id=environment_id,
+        project_id=project_id,
+        user_id=user_id,
         permissions=context.permissions
     )
     SecurityContextHolder.set_context(ctx)

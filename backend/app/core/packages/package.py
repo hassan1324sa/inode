@@ -12,6 +12,7 @@ class PackageManifest(BaseModel):
     description: Optional[str] = None
     author: Optional[str] = None
     publisher: Optional[str] = None
+    category: Optional[str] = None
     engines: Dict[str, str] = Field(default_factory=dict)  # e.g. {"fluxa": ">=1.0", "python": ">=3.10"}
     nodes: List[str] = Field(default_factory=list)
     providers: List[str] = Field(default_factory=list)
@@ -31,6 +32,7 @@ class PackageManifest(BaseModel):
             "description": self.description,
             "author": self.author,
             "publisher": self.publisher,
+            "category": self.category,
             "engines": self.engines,
             "nodes": sorted(self.nodes),
             "providers": sorted(self.providers),

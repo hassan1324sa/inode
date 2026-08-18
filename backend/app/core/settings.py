@@ -7,11 +7,36 @@ import os
 load_dotenv()
 
 class JWTSettings(BaseSettings):
-    secret: str = Field(default_factory=lambda: os.getenv("JWT_SECRET", "super_secret_key_change_me"), validation_alias="JWT_SECRET")
-    algorithm: str = Field(default_factory=lambda: os.getenv("JWT_ALGORITHM", "HS256"), validation_alias="JWT_ALGORITHM")
-    access_token_expire_minutes: int = Field(default_factory=lambda: int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")), validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES")
-    refresh_token_expire_days: int = Field(default_factory=lambda: int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30")), validation_alias="REFRESH_TOKEN_EXPIRE_DAYS")
+    secret: str = Field(default_factory=lambda: os.environ.get("JWT_SECRET"), validation_alias="JWT_SECRET")
+    algorithm: str = Field(default_factory=lambda: os.environ.get("JWT_ALGORITHM", "HS256"), validation_alias="JWT_ALGORITHM")
+    access_token_expire_minutes: int = Field(default_factory=lambda: int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "30")), validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES")
+    refresh_token_expire_days: int = Field(default_factory=lambda: int(os.environ.get("REFRESH_TOKEN_EXPIRE_DAYS", "30")), validation_alias="REFRESH_TOKEN_EXPIRE_DAYS")
     model_config = SettingsConfigDict(extra="ignore")
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if not self.secret:
+            raise RuntimeError("CRITICAL: JWT_SECRET environment variable is missing. It must be explicitly configured.")
+        insecure_placeholders = {
+            "super_secret_key_change_me", "change_me", "secret", "123456",
+            "admin", "password", "default", "fluxa_secret", "jwt_secret_key",
+            "development_secret_only_do_not_use"
+        }
+        if self.secret.lower() in insecure_placeholders:
+            raise RuntimeError("CRITICAL: Insecure placeholder JWT_SECRET configured.")
+        if len(self.secret) < 32:
+            raise RuntimeError("CRITICAL: Weak JWT_SECRET (must be at least 32 characters long).")
+
+class SecuritySettings(BaseSettings):
+    credential_encryption_key: str = Field(default_factory=lambda: os.environ.get("CREDENTIAL_ENCRYPTION_KEY"), validation_alias="CREDENTIAL_ENCRYPTION_KEY")
+    model_config = SettingsConfigDict(extra="ignore")
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if not self.credential_encryption_key:
+            raise RuntimeError("CRITICAL: CREDENTIAL_ENCRYPTION_KEY environment variable is missing.")
+        if len(self.credential_encryption_key) < 32:
+            raise RuntimeError("CRITICAL: CREDENTIAL_ENCRYPTION_KEY must be at least 32 characters long.")
 
 class DatabaseSettings(BaseSettings):
     mongo_uri: str = Field(default_factory=lambda: os.getenv("MONGO_URI", "mongodb://localhost:27017"), validation_alias="MONGO_URI")
@@ -29,7 +54,7 @@ class OpenRouterSettings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
 class Settings(BaseSettings):
-    app_name: str = Field(default_factory=lambda: os.getenv("APP_NAME", "Fluxa"), validation_alias="APP_NAME")
+    app_name: str = Field(default_factory=lambda: os.getenv("APP_NAME", "iNode"), validation_alias="APP_NAME")
     env: str = Field(default_factory=lambda: os.getenv("ENV", "development"), validation_alias="ENV")
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"],
@@ -37,6 +62,7 @@ class Settings(BaseSettings):
     )
     
     jwt: JWTSettings = JWTSettings()
+    security: SecuritySettings = SecuritySettings()
     db: DatabaseSettings = DatabaseSettings()
     cache: CacheSettings = CacheSettings()
     temporal: TemporalSettings = TemporalSettings()

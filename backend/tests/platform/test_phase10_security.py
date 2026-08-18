@@ -133,14 +133,12 @@ async def test_policy_decisions_and_fail_closed():
 
     # OPA/Cedar Engine Fail-Closed on missing config/endpoint
     opa = OPAPolicyEngine(opa_url=None)
-    dec_opa = await opa.evaluate(req_allow)
-    assert dec_opa.effect == "DENY"
-    assert "Fail Closed" in dec_opa.reason
+    with pytest.raises(SecurityException):
+        await opa.evaluate(req_allow)
 
     cedar = CedarPolicyEngine(cedar_url=None)
-    dec_cedar = await cedar.evaluate(req_allow)
-    assert dec_cedar.effect == "DENY"
-    assert "Fail Closed" in dec_cedar.reason
+    with pytest.raises(SecurityException):
+        await cedar.evaluate(req_allow)
 
 
 def test_worker_isolation_enforcement():

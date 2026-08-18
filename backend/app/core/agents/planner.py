@@ -77,10 +77,7 @@ class SequentialPlanner(BasePlanner):
                 )
         else:
             # Fallback for testing/default when no LLM is configured
-            parsed_steps = [
-                PlanStep(tool_name="get_data", args={"query": goal}, thought="Retrieve initial details"),
-                PlanStep(tool_name="process_data", args={}, thought="Process retrieved details")
-            ]
+            raise ValueError("No LLM model configured for planning. Please configure an AI provider credential.")
         
         return PlannerResponse(steps=parsed_steps, cost=cost)
 
@@ -161,17 +158,7 @@ class ReActPlanner(BasePlanner):
             return PlannerResponse(steps=[next_step], cost=cost)
         else:
             # Mock reasoning loop for verification
-            if len(observations) == 0:
-                return PlannerResponse(
-                    steps=[PlanStep(tool_name="search_web", args={"query": goal}, thought="Search the goal")],
-                    cost=0.0
-                )
-            else:
-                return PlannerResponse(
-                    is_completed=True,
-                    final_answer=f"Solved based on: {observations[-1]}",
-                    cost=0.0
-                )
+            raise ValueError("No LLM model configured for ReAct planning. Please configure an AI provider credential.")
 
 
 class PlanAndSolvePlanner(BasePlanner):
@@ -188,18 +175,24 @@ class PlanAndSolvePlanner(BasePlanner):
     ) -> PlannerResponse:
         if len(current_plan.steps) == 0:
             # Formulate macro plan
-            prompt = f"Create a macro-level plan with steps to solve: '{goal}'"
+            prompt = f"Create a macro-level plan with steps to solve: '{goal}'. Respond in JSON format with a list of steps, each having 'tool_name', 'args', and 'thought'."
             cost = 0.0
+            parsed_steps = []
             if self.model_router:
                 res = await self.model_router.generate(prompt=prompt, context=context)
                 cost = res.get("cost", 0.0)
-                # Parse steps...
+                data = res.get("json_data", {})
+                raw_steps = data.get("steps", [])
+                for rs in raw_steps:
+                    parsed_steps.append(PlanStep(
+                        tool_name=rs.get("tool_name"),
+                        args=rs.get("args", {}),
+                        thought=rs.get("thought", "")
+                    ))
+            else:
+                raise ValueError("No LLM model configured for planning.")
             
-            macro_steps = [
-                PlanStep(tool_name="retrieve_docs", args={"query": goal}, thought="Macro step 1"),
-                PlanStep(tool_name="synthesize", args={}, thought="Macro step 2")
-            ]
-            return PlannerResponse(steps=macro_steps, cost=cost)
+            return PlannerResponse(steps=parsed_steps, cost=cost)
 
         all_done = all(s.status == "completed" for s in current_plan.steps)
         if all_done:
@@ -212,7 +205,9 @@ class PlanAndSolvePlanner(BasePlanner):
 
 class TreeOfThoughtPlanner(BasePlanner):
     """
-    Explores multiple reasoning paths/branches.
+    An LLM-assisted branching strategy that prompts the model to explore multiple 
+    reasoning paths internally and return the best one. 
+    This does NOT implement a full iterative Tree-of-Thought search tree in code.
     """
     async def plan(
         self,
@@ -223,17 +218,24 @@ class TreeOfThoughtPlanner(BasePlanner):
         current_plan: Plan
     ) -> PlannerResponse:
         # Simulates exploring 3 branches and choosing the best one
-        prompt = f"Explore 3 possible branches to solve '{goal}' and return the steps for the highest scoring branch."
+        prompt = f"Explore 3 possible branches to solve '{goal}' and return the steps for the highest scoring branch. Respond in JSON format with a list of steps, each having 'tool_name', 'args', and 'thought'."
         cost = 0.0
+        parsed_steps = []
         if self.model_router:
             res = await self.model_router.generate(prompt=prompt, context=context)
             cost = res.get("cost", 0.0)
+            data = res.get("json_data", {})
+            raw_steps = data.get("steps", [])
+            for rs in raw_steps:
+                parsed_steps.append(PlanStep(
+                    tool_name=rs.get("tool_name"),
+                    args=rs.get("args", {}),
+                    thought=rs.get("thought", "")
+                ))
+        else:
+            raise ValueError("No LLM model configured for planning.")
             
-        selected_branch_steps = [
-            PlanStep(tool_name="evaluate_branch", args={"branch": "best_path"}, thought="ToT selected branch execution")
-        ]
-        
         if len(current_plan.steps) > 0 and all(s.status == "completed" for s in current_plan.steps):
             return PlannerResponse(is_completed=True, final_answer="TreeOfThought resolved best branch.")
             
-        return PlannerResponse(steps=selected_branch_steps, cost=cost)
+        return PlannerResponse(steps=parsed_steps, cost=cost)

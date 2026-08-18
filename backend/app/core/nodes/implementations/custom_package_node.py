@@ -31,48 +31,7 @@ class CustomPackageExecutor(BaseNodeExecutor):
         if package_name not in installed_packages:
             raise ValueError(f"Access Denied: Package '{package_name}' is not installed in this organization.")
 
-        # 2. Simulate the execution of the package logic
-        output_data: Dict[str, Any] = {
-            "package_name": package_name,
-            "executed_at": datetime.now(timezone.utc).isoformat(),
-            "status": "success"
-        }
-
-        if package_name == "@fluxa/core-extensions":
-            output_data.update({
-                "generated_uuid": str(uuid.uuid4()),
-                "regex_match": {
-                    "matched": True,
-                    "groups": ["test@example.com"],
-                    "input": "test@example.com"
-                },
-                "formatted_date": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-            })
-        elif package_name == "@fluxa/openai-vision":
-            output_data.update({
-                "ocr_text": "INVOICE SUMMARY\nInvoice Number: INV-2026-089\nTotal Amount: $4,580.00\nDate: 2026-08-12",
-                "detected_objects": ["Text Block", "Invoice Table", "Header Logo"],
-                "confidence_score": 0.985
-            })
-        elif package_name == "@fluxa/salesforce-crm":
-            output_data.update({
-                "lead_id": f"00Q{uuid.uuid4().hex[:15].upper()}",
-                "lead_status": "New",
-                "synced_fields": ["name", "email", "company"]
-            })
-        elif package_name == "@fluxa/aws-s3":
-            output_data.update({
-                "s3_url": f"https://fluxa-data-bucket.s3.amazonaws.com/uploads/file-{uuid.uuid4().hex[:8]}.json",
-                "bytes_transferred": 8192,
-                "encryption": "AES256"
-            })
-        else:
-            output_data.update({
-                "message": "Custom package executed successfully.",
-                "payload": {}
-            })
-
-        # 3. Save output into the execution context
-        context.set_node_output(node_id, output_data)
+        # 2. Package execution logic is not implemented
+        raise NotImplementedError("Custom package execution is not currently supported.")
 
         return context

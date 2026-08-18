@@ -2,6 +2,12 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, List, Dict, Any
 from enum import Enum
 
+CURRENT_SCHEMA_VERSION = "v1"
+CURRENT_FORMAT_VERSION = 1
+CURRENT_ENGINE_VERSION = 1
+CURRENT_NODE_REGISTRY_VERSION = 1
+CURRENT_WORKFLOW_VERSION = 1
+
 class EnvironmentMode(str, Enum):
     DEVELOPMENT = "Development"
     STAGING = "Staging"
@@ -48,13 +54,13 @@ class UserResponse(BaseModel):
     is_verified: bool
 
 class WorkflowCreate(BaseModel):
-    organization_id: Optional[str] = "org-enterprise-01"
+    organization_id: Optional[str] = None
     name: Optional[str] = "Untitled Workflow"
     description: Optional[str] = None
-    formatVersion: Optional[int] = 1
-    engineVersion: Optional[int] = 1
-    nodeRegistryVersion: Optional[int] = 1
-    workflowVersion: Optional[int] = 1
+    formatVersion: Optional[int] = CURRENT_FORMAT_VERSION
+    engineVersion: Optional[int] = CURRENT_ENGINE_VERSION
+    nodeRegistryVersion: Optional[int] = CURRENT_NODE_REGISTRY_VERSION
+    workflowVersion: Optional[int] = CURRENT_WORKFLOW_VERSION
     metadata: Optional[Dict[str, Any]] = None
     variables: Optional[Dict[str, Any]] = None
     nodes: Optional[List[Dict[str, Any]]] = None
@@ -62,16 +68,16 @@ class WorkflowCreate(BaseModel):
 
 class WorkflowResponse(BaseModel):
     id: str
-    organization_id: str = "org-enterprise-01"
+    organization_id: str
     name: str
     description: Optional[str] = None
-    current_version: str = "v1"
+    current_version: str = CURRENT_SCHEMA_VERSION
     published_version: Optional[str] = None
     status: str = "Draft"
-    formatVersion: int = 1
-    engineVersion: int = 1
-    nodeRegistryVersion: int = 1
-    workflowVersion: int = 1
+    formatVersion: int = CURRENT_FORMAT_VERSION
+    engineVersion: int = CURRENT_ENGINE_VERSION
+    nodeRegistryVersion: int = CURRENT_NODE_REGISTRY_VERSION
+    workflowVersion: int = CURRENT_WORKFLOW_VERSION
     metadata: Optional[Dict[str, Any]] = None
     variables: Optional[Dict[str, Any]] = {}
     nodes: Optional[List[Dict[str, Any]]] = []

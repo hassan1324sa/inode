@@ -100,7 +100,7 @@ class ModelRouter(BaseModel):
                         "text": content,
                         "json_data": json_data,
                         "model_used": model,
-                        "cost": 0.002
+                        "cost": 0.0
                     }
                     if execution_id and not is_replay:
                         from app.core.execution.durable_store import MongoDBEventStore, ExecutionEffect

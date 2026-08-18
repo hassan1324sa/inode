@@ -90,7 +90,7 @@ class LiveExecutionStreamManager:
 
     @classmethod
     async def connect(
-        self,
+        cls,
         websocket: WebSocket,
         execution_id: str,
         tenant_id: str,
@@ -105,18 +105,18 @@ class LiveExecutionStreamManager:
                     return False
                 await websocket.send_json(me.model_dump())
 
-        if execution_id not in self._active_connections:
-            self._active_connections[execution_id] = {}
+        if execution_id not in cls._active_connections:
+            cls._active_connections[execution_id] = {}
             
-        self._active_connections[execution_id][websocket] = tenant_id
+        cls._active_connections[execution_id][websocket] = tenant_id
         return True
 
     @classmethod
-    def disconnect(self, websocket: WebSocket, execution_id: str):
-        if execution_id in self._active_connections:
-            self._active_connections[execution_id].pop(websocket, None)
-            if not self._active_connections[execution_id]:
-                del self._active_connections[execution_id]
+    def disconnect(cls, websocket: WebSocket, execution_id: str):
+        if execution_id in cls._active_connections:
+            cls._active_connections[execution_id].pop(websocket, None)
+            if not cls._active_connections[execution_id]:
+                del cls._active_connections[execution_id]
 
 
 class ReplayEngine:

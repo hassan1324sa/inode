@@ -23,9 +23,23 @@ from app.api.v1.health import router as health_router
 from app.api.v1.endpoints import auth_router, org_router, wf_router, debug_router, pkg_router, telegram_router
 from app.core.execution.live_debug import LiveExecutionStreamManager
 
+import re
+
+class SecretRedactionFilter(logging.Filter):
+    def filter(self, record):
+        if isinstance(record.msg, str):
+            record.msg = re.sub(
+                r'(?i)(password|secret|token|authorization|key)["\']?\s*[:=]\s*["\']?[^\s"\'},]+["\']?',
+                r'\1" : "***"',
+                record.msg
+            )
+        return True
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
+for handler in logging.root.handlers:
+    handler.addFilter(SecretRedactionFilter())
+logger.addFilter(SecretRedactionFilter())
 
 # ---------------------------------------------------------------------------
 # Security Middleware — defined BEFORE it is referenced by app.add_middleware
@@ -161,7 +175,7 @@ class SecurityContextASGIMiddleware:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting up Fluxa API...")
+    logger.info("Starting up iNode API...")
     try:
         await db_manager.connect_db(
             document_models=[
@@ -192,7 +206,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    logger.info("Shutting down Fluxa API...")
+    logger.info("Shutting down iNode API...")
     await db_manager.close_db()
 
 
@@ -202,7 +216,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    description="Fluxa Workflow Automation API",
+    description="iNode Workflow Automation API",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -265,13 +279,14 @@ async def validation_exception_handler(request, exc: RequestValidationError):
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request, exc: Exception):
+    logger.exception("Unhandled exception occurred: %s", str(exc))
     return JSONResponse(
         status_code=500,
         content={
             "statusCode": 500,
             "code": "SERVER_ERROR",
             "message": "Internal Server Error",
-            "detail": str(exc),
+            "detail": "An internal server error occurred."
         },
     )
 

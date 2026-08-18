@@ -126,11 +126,11 @@ export class FetchNodeRegistry {
             label: 'Model',
             type: 'select',
             required: true,
-            defaultValue: 'gemini-1.5-flash',
+            defaultValue: 'google/gemini-2.5-flash',
             options: [
-              { label: 'Gemini 1.5 Flash', value: 'gemini-1.5-flash' },
-              { label: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro' },
-              { label: 'GPT-4o', value: 'gpt-4o' },
+              { label: 'Gemini 2.5 Flash', value: 'google/gemini-2.5-flash' },
+              { label: 'Gemini 2.5 Pro', value: 'google/gemini-2.5-pro' },
+              { label: 'GPT-4o', value: 'openai/gpt-4o' },
             ],
           },
           { name: 'prompt', label: 'System Instructions / Prompt', type: 'textarea', required: true, defaultValue: '' },
@@ -154,7 +154,7 @@ export class FetchNodeRegistry {
       icon: 'Cpu',
       color: '#10B981',
       defaultData: () => ({
-        model: 'gemini-1.5-flash',
+        model: 'google/gemini-2.5-flash',
         prompt: 'Summarize the input',
         memoryProvider: 'conversation',
         memoryKey: 'customer_{{current_row.email}}',
@@ -286,12 +286,12 @@ export class FetchNodeRegistry {
         version: 1,
         fields: [
           { name: 'channel', label: 'Channel', type: 'text', required: true, defaultValue: '#general' },
-          { name: 'message', label: 'Message Body', type: 'textarea', required: true, defaultValue: 'Hello from Fluxa!' },
+          { name: 'message', label: 'Message Body', type: 'textarea', required: true, defaultValue: 'Hello from iNode!' },
         ],
       },
       icon: 'MessageSquare',
       color: '#EC4899',
-      defaultData: () => ({ channel: '#general', message: 'Hello from Fluxa!' }),
+      defaultData: () => ({ channel: '#general', message: 'Hello from iNode!' }),
       validate: (data: any) => {
         const errors: string[] = [];
         if (!data?.channel) errors.push('Channel required');
@@ -302,9 +302,9 @@ export class FetchNodeRegistry {
     });
 
     // 7. IF Condition Node (Logic)
-    this.plugins.set('if_condition', {
+    this.plugins.set('conditional', {
       metadata: {
-        id: 'if_condition',
+        id: 'conditional',
         name: 'IF Condition',
         category: 'Logic',
         description: 'Branch workflow execution based on variable or expression test',
@@ -367,12 +367,12 @@ export class FetchNodeRegistry {
         version: 1,
         fields: [
           { name: 'operation', label: 'Operation', type: 'select', defaultValue: 'read', options: [{ label: 'Read File', value: 'read' }, { label: 'Write File', value: 'write' }] },
-          { name: 'filePath', label: 'File Path', type: 'text', required: true, defaultValue: '/data/output.json' },
+          { name: 'filePath', label: 'File Path', type: 'text', required: true, defaultValue: '' },
         ],
       },
       icon: 'Folder',
       color: '#6366F1',
-      defaultData: () => ({ operation: 'read', filePath: '/data/output.json' }),
+      defaultData: () => ({ operation: 'read', filePath: '' }),
       validate: (data: any) => ({ isValid: !!data?.filePath, errors: data?.filePath ? [] : ['File Path required'] }),
       migrate: (_v, data) => data as any,
     });
@@ -481,9 +481,9 @@ export class FetchNodeRegistry {
       migrate: (_v, data) => data as any,
     });
     // 12. Send Email Node (Communication)
-    this.plugins.set('send-email', {
+    this.plugins.set('send_email', {
       metadata: {
-        id: 'send-email',
+        id: 'send_email',
         name: 'Send Email',
         category: 'Communication',
         description: 'Send custom proposals or outgoing messages via SMTP',
@@ -495,9 +495,9 @@ export class FetchNodeRegistry {
       schema: {
         version: 1,
         fields: [
-          { name: 'smtp_host', label: 'SMTP Host', type: 'text', required: true, defaultValue: 'localhost' },
-          { name: 'smtp_port', label: 'SMTP Port', type: 'text', required: true, defaultValue: '1025' },
-          { name: 'username', label: 'Username', type: 'text', required: true, defaultValue: 'sender@example.com' },
+          { name: 'smtp_host', label: 'SMTP Host', type: 'text', required: true, defaultValue: '' },
+          { name: 'smtp_port', label: 'SMTP Port', type: 'text', required: true, defaultValue: '' },
+          { name: 'username', label: 'Username', type: 'text', required: true, defaultValue: '' },
           { name: 'recipient', label: 'Recipient Email', type: 'text', required: true, defaultValue: '{{email}}' },
           { name: 'subject', label: 'Subject', type: 'text', required: true, defaultValue: 'Proposal' },
           { name: 'body', label: 'Email Body (Plain text or template)', type: 'textarea', required: true, defaultValue: '' },
@@ -507,9 +507,9 @@ export class FetchNodeRegistry {
       icon: 'Mail',
       color: '#F43F5E',
       defaultData: () => ({
-        smtp_host: 'localhost',
-        smtp_port: '1025',
-        username: 'sender@example.com',
+        smtp_host: '',
+        smtp_port: '',
+        username: '',
         recipient: '{{email}}',
         subject: 'Proposal',
         body: 'Hello...',
@@ -524,9 +524,9 @@ export class FetchNodeRegistry {
       migrate: (_v, data) => data as any,
     });
     // 13. Read Excel Node (Files)
-    this.plugins.set('read-excel', {
+    this.plugins.set('read_excel', {
       metadata: {
-        id: 'read-excel',
+        id: 'read_excel',
         name: 'Read Excel / CSV',
         category: 'Files',
         description: 'Read rows of data from Excel or CSV files',
@@ -538,14 +538,14 @@ export class FetchNodeRegistry {
       schema: {
         version: 1,
         fields: [
-          { name: 'file_path', label: 'File Path (.csv)', type: 'text', required: true, defaultValue: 'd:\\Fluxa\\leads.csv' },
+          { name: 'file_path', label: 'File Path (.csv, .xlsx)', type: 'text', required: true, defaultValue: '' },
           { name: 'output_var', label: 'Output Variable Name', type: 'text', required: true, defaultValue: 'rows' }
         ],
       },
       icon: 'FileSpreadsheet',
       color: '#10B981',
       defaultData: () => ({
-        file_path: 'd:\\Fluxa\\leads.csv',
+        file_path: '',
         output_var: 'rows'
       }),
       validate: (data: any) => {
@@ -605,18 +605,18 @@ export class FetchNodeRegistry {
         fields: [
           { name: 'botToken', label: 'Telegram Bot Token ID (Vault)', type: 'secret', required: true, defaultValue: '' },
           { name: 'chatId', label: 'Chat ID', type: 'text', required: true, defaultValue: '{{telegram_chat_id}}' },
-          { name: 'message', label: 'Message Text', type: 'textarea', required: true, defaultValue: 'Hello from Fluxa!' }
+          { name: 'message', label: 'Message Text', type: 'textarea', required: true, defaultValue: 'Hello from iNode!' }
         ],
       },
       icon: 'Send',
       color: '#10B981',
-      defaultData: () => ({ botToken: '', chatId: '{{telegram_chat_id}}', message: 'Hello from Fluxa!' }),
+      defaultData: () => ({ botToken: '', chatId: '{{telegram_chat_id}}', message: 'Hello from iNode!' }),
       validate: (data: any) => {
         const errors: string[] = [];
         const botToken = data?.botToken || data?.botToken_ref;
         if (!botToken) errors.push('Bot Token is required');
         const chatId = data?.chatId !== undefined && data?.chatId !== '' ? data.chatId : '{{telegram_chat_id}}';
-        const message = data?.message !== undefined && data?.message !== '' ? data.message : 'Hello from Fluxa!';
+        const message = data?.message !== undefined && data?.message !== '' ? data.message : 'Hello from iNode!';
         if (!chatId) errors.push('Chat ID is required');
         if (!message) errors.push('Message Text is required');
         return { isValid: errors.length === 0, errors };
@@ -625,9 +625,9 @@ export class FetchNodeRegistry {
     });
 
     // 16. Read Email (IMAP) Node (Communication)
-    this.plugins.set('read-email-imap', {
+    this.plugins.set('read_email_imap', {
       metadata: {
-        id: 'read-email-imap',
+        id: 'read_email_imap',
         name: 'Read Email Inbox (IMAP)',
         category: 'Communication',
         description: 'Connect to an IMAP server to read recent inbox messages',

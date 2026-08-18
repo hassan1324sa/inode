@@ -41,14 +41,45 @@ class EpisodicMemoryRecord(BaseModel):
 
 
 class EpisodicMemory(BaseModel):
+    """
+    Stores execution episodes and provides search via lexical (Bag-of-Words) similarity.
+    This does NOT use semantic vector search.
+    """
     episodes: List[EpisodicMemoryRecord] = Field(default_factory=list)
 
     async def record_episode(self, record: EpisodicMemoryRecord):
         self.episodes.append(record)
 
     async def search_episodes(self, query: str) -> List[EpisodicMemoryRecord]:
-        # Simple string-matching/semantic placeholder search
-        return [e for e in self.episodes if query.lower() in e.goal.lower() or query.lower() in (e.final_answer or "").lower()]
+        import re
+        import math
+        import collections
+
+        if not query.strip():
+            return []
+
+        def get_words(text):
+            return collections.Counter(re.findall(r'\w+', (text or "").lower()))
+            
+        def text_similarity(q_vec, t_vec):
+            intersection = set(q_vec.keys()) & set(t_vec.keys())
+            numerator = sum([q_vec[x] * t_vec[x] for x in intersection])
+            sum1 = sum([q_vec[x]**2 for x in q_vec.keys()])
+            sum2 = sum([t_vec[x]**2 for x in t_vec.keys()])
+            denominator = math.sqrt(sum1) * math.sqrt(sum2)
+            return float(numerator) / denominator if denominator else 0.0
+
+        query_vec = get_words(query)
+        
+        results = []
+        for e in self.episodes:
+            text = f"{e.goal} {e.final_answer or ''}"
+            score = text_similarity(query_vec, get_words(text))
+            if score > 0:
+                results.append((score, e))
+                
+        results.sort(key=lambda x: x[0], reverse=True)
+        return [r[1] for r in results]
 
 
 class MemoryRecord(BaseModel):

@@ -14,9 +14,9 @@ from typing import Optional, Dict, Any, Tuple
 def create_access_token(
     user_id: str,
     organization_id: str,
-    workspace_id: str = "default-w",
-    environment_id: str = "default-e",
-    project_id: str = "default-p",
+    workspace_id: Optional[str] = None,
+    environment_id: Optional[str] = None,
+    project_id: Optional[str] = None,
     expires_delta: Optional[timedelta] = None
 ) -> str:
     now = datetime.now(timezone.utc)
@@ -47,7 +47,7 @@ def create_refresh_token(
     if expires_delta:
         expire = now + expires_delta
     else:
-        expire = now + timedelta(days=7)
+        expire = now + timedelta(days=settings.jwt.refresh_token_expire_days)
     
     jti = str(uuid.uuid4())
     to_encode = {
@@ -71,9 +71,9 @@ def decode_access_token(token: str) -> SecurityContext:
         )
         user_id: str = payload.get("sub")
         org_id: str = payload.get("org_id")
-        ws_id: str = payload.get("ws_id", "default-w")
-        env_id: str = payload.get("env_id", "default-e")
-        proj_id: str = payload.get("proj_id", "default-p")
+        ws_id: Optional[str] = payload.get("ws_id")
+        env_id: Optional[str] = payload.get("env_id")
+        proj_id: Optional[str] = payload.get("proj_id")
         token_type: str = payload.get("type")
         
         if token_type != "access":

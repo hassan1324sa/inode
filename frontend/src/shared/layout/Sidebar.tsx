@@ -25,9 +25,9 @@ export const Sidebar: React.FC = () => {
         {/* Logo */}
         <div className="flex items-center gap-3 px-2 py-1">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-primary to-purple-600 flex items-center justify-center text-white font-black shadow-lg shadow-primary/30 border border-primary/40" style={{ boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.4), 0 3px 6px rgba(0,0,0,0.4)' }}>
-            F
+            i
           </div>
-          <span className="font-extrabold text-lg text-foreground tracking-tight" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}>Fluxa</span>
+          <span className="font-extrabold text-lg text-foreground tracking-tight" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}>iNode</span>
         </div>
 
 

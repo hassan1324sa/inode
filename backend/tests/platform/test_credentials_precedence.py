@@ -19,6 +19,14 @@ async def test_credentials_precedence_and_fail_closed():
         variables={}
     )
     
+    SecurityContextHolder.set_context(SecurityContext(
+        organization_id="tenant-test-precedence",
+        workspace_id="workspace-1",
+        environment_id="env-1",
+        project_id="proj-1",
+        user_id="system"
+    ))
+    
     # 1. Verify Fail-Closed when no credentials exist anywhere
     orig_api_key = settings.openrouter.api_key
     settings.openrouter.api_key = None
@@ -56,13 +64,6 @@ async def test_credentials_precedence_and_fail_closed():
         
     # 3. Verify priority 2: Tenant Credential from Vault takes precedence over Settings
     provider = VaultSecretProvider()
-    SecurityContextHolder.set_context(SecurityContext(
-        organization_id="tenant-test-precedence",
-        workspace_id="workspace-1",
-        environment_id="env-1",
-        project_id="proj-1",
-        user_id="system"
-    ))
     
     # Put tenant key in Vault
     await provider.put("openrouter_api_key", "sk-or-v1-tenant-level-vault-key-long")

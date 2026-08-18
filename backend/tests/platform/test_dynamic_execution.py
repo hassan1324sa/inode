@@ -63,6 +63,15 @@ async def test_conditional_node_executor_dynamic():
 
 @pytest.mark.anyio
 async def test_dynamic_e2e_branching_and_ai_workflow():
+    from app.core.security.context import SecurityContext, SecurityContextHolder
+    SecurityContextHolder.set_context(SecurityContext(
+        organization_id="tenant-a",
+        workspace_id="workspace-1",
+        environment_id="env-1",
+        project_id="proj-1",
+        user_id="system"
+    ))
+    
     async def mock_llm_handler(prompt, system_prompt, context, target_model=None):
         if "Ahmed" in prompt:
             return {
@@ -75,7 +84,7 @@ async def test_dynamic_e2e_branching_and_ai_workflow():
     # 2. Build dynamic E2E workflow nodes
     read_excel_node = {
         "id": "read-excel-1",
-        "type": "read-excel",
+        "type": "read_excel",
         "file_path": "temp_mock.csv", # will be mocked/skipped or read if exists
         "output_var": "customers"
     }
@@ -123,7 +132,7 @@ async def test_dynamic_e2e_branching_and_ai_workflow():
         # Step 3: Run Email Node resolving recipient from current_row and body from AI output
         email_node = {
             "id": "email-1",
-            "type": "send-email",
+            "type": "send_email",
             "recipient": "{{current_row.email}}",
             "subject": "Reward Alert for {{current_row.name}}",
             "body": "Your status is: {{ai-1.text}}",
@@ -141,6 +150,8 @@ async def test_dynamic_e2e_branching_and_ai_workflow():
             assert call_args[1] == ["ahmed@example.com"]
             assert "Reward Alert for Ahmed" in call_args[2]
             assert "Your status is: Send Premium Email" in call_args[2]
+            
+    SecurityContextHolder.clear_context()
 
 @pytest.mark.anyio
 async def test_dynamic_e2e_false_branch_evaluation():

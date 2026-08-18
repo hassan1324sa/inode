@@ -10,10 +10,12 @@ python-dotenv
 pytest
 httpx
 temporalio
-mongomock-motor 
-pytest-asyncio 
+mongomock-motor
+pytest-asyncio
 anyio
 
 google-auth
 google-auth-oauthlib
 google-api-python-client
+cryptography
+openpyxl

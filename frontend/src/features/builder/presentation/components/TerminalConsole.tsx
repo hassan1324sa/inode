@@ -128,7 +128,7 @@ export const TerminalConsole: React.FC = () => {
             return (
               <div key={idx} className="flex gap-2 items-start py-0.5 border-b border-slate-900/50 hover:bg-slate-900/20 px-2 rounded">
                 <span className="text-[10px]">{icon}</span>
-                <span className="text-slate-500 font-semibold select-none">fluxa_stdout:~$</span>
+                <span className="text-slate-500 font-semibold select-none">inode_stdout:~$</span>
                 <span className={`flex-1 break-all ${textColor}`}>{log}</span>
               </div>
             );

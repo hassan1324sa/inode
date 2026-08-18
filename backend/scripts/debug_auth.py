@@ -7,7 +7,10 @@ import time
 import urllib.request
 import urllib.error
 
-BASE_URL = "http://localhost:8000/api/v1"
+BASE_URL = os.environ.get("API_BASE_URL")
+if not BASE_URL:
+    print("API_BASE_URL environment variable is required")
+    sys.exit(1)
 
 def print_section(title):
     print(f"\n{'='*50}\n{title}\n{'='*50}")
@@ -43,9 +46,11 @@ def make_request(url, method="GET", data=None, headers=None):
         return 0, str(e)
 
 def main():
-    test_id = str(uuid.uuid4())[:8]
-    email = f"test_{test_id}@example.com"
-    password = "password123"
+    email = os.environ.get("DEBUG_EMAIL")
+    password = os.environ.get("DEBUG_PASSWORD")
+    if not email or not password:
+        print("DEBUG_EMAIL and DEBUG_PASSWORD environment variables are required")
+        sys.exit(1)
     
     print_section("1. Registering User")
     status, body = make_request(f"{BASE_URL}/auth/register", method="POST", data={

@@ -12,3 +12,8 @@ from .custom_package_node import CustomPackageExecutor
 from .telegram_send import TelegramSendExecutor
 from .read_email_imap import ReadEmailImapExecutor
 from .telegram_trigger import TelegramTriggerNodeExecutor
+from .slack_notification import SlackNotificationExecutor
+from .transform_json import TransformJsonExecutor
+from .delay_timer import DelayTimerExecutor
+from .webhook_trigger import WebhookTriggerNodeExecutor
+from .schedule_trigger import ScheduleTriggerNodeExecutor

@@ -142,7 +142,7 @@ class ExecutionService:
             exec_obj = await Execution.get(ObjectId(execution_id))
             if exec_obj:
                 exec_obj.status = ExecutionStatus.COMPLETED
-                exec_obj.completed_at = datetime.now(timezone.utc).isoformat()
+                exec_obj.finished_at = datetime.now(timezone.utc).isoformat()
                 await exec_obj.save()
 
         except Exception as e:

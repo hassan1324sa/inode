@@ -39,7 +39,11 @@ class LocalPolicyEngine(BasePolicyEngine):
             return PolicyDecision(effect="DENY", reason="Action is restricted locally.")
         if "approval" in request.action:
             return PolicyDecision(effect="REQUIRE_APPROVAL", reason="Needs user confirmation.")
-        return PolicyDecision(effect="ALLOW", reason="Allowed by local default.")
+        allowed_actions = ["read", "write", "execute", "create", "update", "delete", "execute_workflow", "execute_node"]
+        if request.action in allowed_actions:
+            return PolicyDecision(effect="ALLOW", reason="Allowed by explicit local rule.")
+        
+        return PolicyDecision(effect="DENY", reason="Action denied by default (Fail Closed).")
 
 
 class OPAPolicyEngine(BasePolicyEngine):
@@ -51,16 +55,7 @@ class OPAPolicyEngine(BasePolicyEngine):
 
     async def evaluate(self, request: PolicyRequest) -> PolicyDecision:
         SecurityContextHolder.get_current_context()
-        
-        if not self.opa_url:
-            # Fail closed as provider is unavailable
-            return PolicyDecision(effect="DENY", reason="OPA endpoint not configured (Fail Closed).")
-        
-        if "non-existent" in self.opa_url:
-            return PolicyDecision(effect="DENY", reason="OPA server unreachable (Fail Closed).")
-        
-        # Simulate OPA HTTP query
-        return PolicyDecision(effect="ALLOW", reason="Allowed by OPA server.")
+        raise SecurityException("OPA Engine integration is not currently supported or configured (Fail Closed).")
 
 
 class CedarPolicyEngine(BasePolicyEngine):
@@ -72,11 +67,4 @@ class CedarPolicyEngine(BasePolicyEngine):
 
     async def evaluate(self, request: PolicyRequest) -> PolicyDecision:
         SecurityContextHolder.get_current_context()
-        
-        if not self.cedar_url:
-            return PolicyDecision(effect="DENY", reason="Cedar engine not configured (Fail Closed).")
-            
-        if "non-existent" in self.cedar_url:
-            return PolicyDecision(effect="DENY", reason="Cedar server unreachable (Fail Closed).")
-            
-        return PolicyDecision(effect="ALLOW", reason="Allowed by Cedar engine.")
+        raise SecurityException("Cedar Engine integration is not currently supported or configured (Fail Closed).")

@@ -56,6 +56,8 @@ async def test_tenant_isolated_package_installation_lifecycle():
 
     # 2. Query Packages list as Org A -> Check all uninstalled
     SecurityContextHolder.set_context(ctx_a)
+    from app.core.packages.package import PackageManifest
+    PackageMarketplace.publish(PackageManifest(name="@fluxa/openai-vision", version="1.0.0", description="Test package", author="test", category="ai", compatibility={"python": ">=3.9"}))
     res_list_a = client.get("/api/v1/packages/", headers=headers_a)
     assert res_list_a.status_code == 200
     pkgs_a = res_list_a.json()

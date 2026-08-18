@@ -38,18 +38,7 @@ class GoogleSheetsService:
             except Exception as e:
                 logger.warning(f"Failed to load Sheets credentials from Vault: {e}")
 
-        # 2. Try loading from workspace service_account.json file as fallback
-        fallback_path = r"d:\Fluxa\service_account.json"
-        if os.path.exists(fallback_path):
-            try:
-                return service_account.Credentials.from_service_account_file(
-                    fallback_path,
-                    scopes=["https://www.googleapis.com/auth/spreadsheets"]
-                )
-            except Exception as e:
-                logger.warning(f"Failed to load Sheets credentials from fallback file: {e}")
-
-        # 3. Fallback to default credentials
+        # 2. Fallback to default credentials
         try:
             import google.auth
             creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/spreadsheets"])
@@ -60,7 +49,7 @@ class GoogleSheetsService:
     async def read_rows(self, range_name: str = "Sheet1") -> Dict[str, Any]:
         creds = await self._get_creds()
         if not creds:
-            raise ValueError("No Google Sheets credentials found. Please place your service_account.json in the project root or configure credentials.")
+            raise ValueError("No Google Sheets credentials found. Please configure GOOGLE_APPLICATION_CREDENTIALS or the vault credential provider.")
 
         service = build("sheets", "v4", credentials=creds)
         result = service.spreadsheets().values().get(

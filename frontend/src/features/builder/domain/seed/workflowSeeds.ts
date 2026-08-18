@@ -48,7 +48,7 @@ export const DEMO_WORKFLOW_SEED: WorkflowSeedData = {
       data: {
         method: 'POST',
         url: 'https://api.clearbit.com/v2/companies/find',
-        headers: '{"Authorization": "Bearer clk_live_9a8b7"}',
+        headers: '{"Authorization": "Bearer YOUR_API_TOKEN"}',
         body: '{"domain": "{{company}}"}',
         label: '3. Clearbit Enrichment API',
       },
@@ -71,7 +71,7 @@ export const DEMO_WORKFLOW_SEED: WorkflowSeedData = {
       data: {
         model: 'gemini-1.5-pro',
         prompt: 'Draft a tailored VIP executive proposal for {{email}} using enriched CRM & Clearbit company insights.',
-        credentialId: 'gemini-prod-key',
+        credentialId: 'SELECT_CREDENTIAL',
         label: '5. AI VIP Pitch Draft',
       },
     },
@@ -93,7 +93,7 @@ export const DEMO_WORKFLOW_SEED: WorkflowSeedData = {
       position: { x: 1720, y: 220 },
       data: {
         operation: 'write',
-        filePath: '/var/data/leads/vip_pipeline.json',
+        filePath: '',
         label: '7. Archive VIP Lead Record',
       },
     },

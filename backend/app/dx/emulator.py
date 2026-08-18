@@ -1,5 +1,6 @@
 import time
 import os
+import uuid
 from typing import Dict, Any, List, Optional, Set
 from pydantic import BaseModel, Field
 from app.core.registry.node_registry import NodeRegistry
@@ -115,8 +116,8 @@ class LocalEmulator:
         self.context = ExecutionContext(
             workflow_definition_id=workflow_data.get("id", "emulator_workflow"),
             workflow_definition_version=int(workflow_data.get("version", 1)),
-            execution_id="emul_exec_001",
-            tenant_id="local_tenant",
+            execution_id=f"emul_exec_{uuid.uuid4().hex[:8]}",
+            tenant_id=workflow_data.get("tenant_id", "emulator_tenant"),
             variables=self.inputs.copy()
         )
 
@@ -156,11 +157,8 @@ class LocalEmulator:
                     if res.error:
                         self.warnings.append(f"Node '{node_id}' returned non-fatal error: {res.error}")
                 else:
-                    # Emulate generic node execution
-                    self.execution_logs.append(f"[EMULATOR] Node type '{node_type}' not in registry. Simulating execution.")
-                    simulated_output = {"executed": True, "node_id": node_id}
-                    self.context.node_outputs[node_id] = simulated_output
-                    self.context.variables.update(simulated_output)
+                    # Node not found, raise explicit error
+                    raise ValueError(f"No executor registered for node type: {node_type}")
             except Exception as e:
                 self.warnings.append(f"Node '{node_id}' execution error: {str(e)}")
                 self.execution_logs.append(f"[ERROR] Node '{node_id}' failed: {str(e)}")
@@ -170,8 +168,8 @@ class LocalEmulator:
                 self.execution_logs.append(f"[EMULATOR] Executed node '{node_id}' ({node_type}) in {round(elapsed, 2)} ms")
 
         total_time = (time.perf_counter() - start_time) * 1000.0
-        mem_usage = round((process.memory_info().rss / (1024 * 1024)) - start_mem, 2) if process else 1.5
-        cpu_usage = round(psutil.cpu_percent(interval=None), 2) if process else 2.5
+        mem_usage = round((process.memory_info().rss / (1024 * 1024)) - start_mem, 2) if process else None
+        cpu_usage = round(psutil.cpu_percent(interval=None), 2) if process else None
 
         status = "paused" if self.paused else "success"
         return EmulatorRunResult(

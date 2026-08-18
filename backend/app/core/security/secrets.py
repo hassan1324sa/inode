@@ -178,7 +178,7 @@ def encrypt_value(value: str) -> str:
     from cryptography.fernet import Fernet
     from app.core.settings import settings
     
-    key_material = settings.jwt.secret.encode()
+    key_material = settings.security.credential_encryption_key.encode()
     derived_key = hashlib.sha256(key_material).digest()
     fernet_key = base64.urlsafe_b64encode(derived_key)
     f = Fernet(fernet_key)
@@ -190,12 +190,11 @@ def decrypt_value(encrypted_value: str) -> str:
     from cryptography.fernet import Fernet
     from app.core.settings import settings
     
-    key_material = settings.jwt.secret.encode()
+    key_material = settings.security.credential_encryption_key.encode()
     derived_key = hashlib.sha256(key_material).digest()
     fernet_key = base64.urlsafe_b64encode(derived_key)
     f = Fernet(fernet_key)
     try:
         return f.decrypt(encrypted_value.encode()).decode()
-    except Exception:
-        # Fallback to plain text in case of unencrypted entries
-        return encrypted_value
+    except Exception as e:
+        raise ValueError("Decryption failed. The credential may have been encrypted with a different key or is corrupted.") from e

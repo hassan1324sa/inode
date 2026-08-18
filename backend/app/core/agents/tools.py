@@ -153,7 +153,10 @@ class RemoteTool(BaseTool):
 
     async def execute(self, args: Dict[str, Any], context: Any) -> Any:
         import httpx
-        async with httpx.AsyncClient() as client:
+        from app.core.security.ssrf_guard import SSRFSafeTransport, validate_url_security
+        
+        validate_url_security(self.endpoint_url)
+        async with httpx.AsyncClient(transport=SSRFSafeTransport(), timeout=10.0) as client:
             res = await client.post(self.endpoint_url, json=args)
             res.raise_for_status()
             return res.json()

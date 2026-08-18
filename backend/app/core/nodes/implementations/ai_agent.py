@@ -42,21 +42,14 @@ class AIAgentNodeExecutor(BaseNodeExecutor):
         router = ModelRouter(default_model=target_model)
         
         node_api_key = ""
-        # Setup fallback SecurityContext for Vault query if missing
-        from app.core.security.context import SecurityContextHolder, SecurityContext, SecurityException
+        # Require SecurityContext for Vault queries and safe execution
+        from app.core.security.context import SecurityContextHolder, SecurityException
         try:
-            has_context = SecurityContextHolder.get_current_context() is not None
-        except SecurityException:
-            has_context = False
-
-        if not has_context:
-            SecurityContextHolder.set_context(SecurityContext(
-                organization_id=context.tenant_id or "org-enterprise-01",
-                workspace_id="workspace-1",
-                environment_id="env-1",
-                project_id="proj-1",
-                user_id="system"
-            ))
+            current_ctx = SecurityContextHolder.get_current_context()
+            if not current_ctx:
+                raise SecurityException("No security context found")
+        except SecurityException as e:
+            raise PermissionError("SecurityContext is required for AI Agent execution (Fail Closed).") from e
 
         from app.core.security.secrets import VaultSecretProvider, SecretRef
         provider = VaultSecretProvider()

@@ -2,6 +2,9 @@ import pytest
 import asyncio
 import os
 os.environ["FLUXA_SYSTEM_BOOTSTRAP"] = "true"
+os.environ["TESTING"] = "True"
+os.environ["JWT_SECRET"] = "test_jwt_secret_must_be_at_least_32_characters_long_for_security"
+os.environ["CREDENTIAL_ENCRYPTION_KEY"] = "test_cred_key_must_be_at_least_32_characters_long_for_security"
 from httpx import AsyncClient
 from mongomock_motor import AsyncMongoMockClient
 from beanie import init_beanie

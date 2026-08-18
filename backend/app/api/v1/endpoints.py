@@ -30,7 +30,7 @@ async def register(user_data: UserCreate, request: Request):
         email=user_data.email,
         password_hash=hash_password(user_data.password),
         name=user_data.name,
-        is_verified=True
+        is_verified=False  # Email verification is pending/external
     )
     await user.insert()
     return UserResponse(
@@ -48,7 +48,10 @@ class LoginRequest(BaseModel):
     password: str
     organization_id: Optional[str] = None
 
-@auth_router.post("/login")
+from fastapi import Depends
+from app.core.security.rate_limit import rate_limit_login
+
+@auth_router.post("/login", dependencies=[Depends(rate_limit_login)])
 async def login(req: LoginRequest):
     if not req.email or not req.password:
         raise HTTPException(status_code=400, detail="Email and password are required")
@@ -207,12 +210,12 @@ async def refresh_token_endpoint(req: RefreshRequest):
     else:
         org = await Organization.find_one(Organization.owner_id == str(user.id))
         if not org:
-            org = await Organization.find_one(Organization.slug == "my-personal-org")
+            raise HTTPException(status_code=400, detail="User has no default organization")
             
     # 7. Generate new tokens
     new_access_token = create_access_token(
         user_id=str(user.id),
-        organization_id=str(org.id) if org else "my-personal-org"
+        organization_id=str(org.id)
     )
     new_refresh_token, new_jti = create_refresh_token(user_id=str(user.id))
     new_hash = hashlib.sha256(new_refresh_token.encode('utf-8')).hexdigest()
@@ -244,10 +247,15 @@ org_router = APIRouter(prefix="/organizations", tags=["Organizations"])
 
 @org_router.post("/", response_model=OrganizationResponse)
 async def create_org(org_data: OrganizationCreate, request: Request):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     org = Organization(
         name=org_data.name,
         slug=org_data.slug,
-        owner_id=org_data.owner_id,
+        owner_id=ctx.user_id,
         plan="free",
         settings={},
         limits={"max_workflows": 10, "max_executions_daily": 1000}
@@ -255,7 +263,7 @@ async def create_org(org_data: OrganizationCreate, request: Request):
     await org.insert()
     
     # Invalidate cache
-    await request.app.state.memory_cache.delete("organizations:all")
+    await request.app.state.memory_cache.delete(f"organizations:user:{ctx.user_id}")
     
     return OrganizationResponse(
         id=str(org.id),
@@ -268,12 +276,18 @@ async def create_org(org_data: OrganizationCreate, request: Request):
 
 @org_router.get("/", response_model=List[OrganizationResponse])
 async def list_orgs(request: Request):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     cache = request.app.state.memory_cache
-    cached_data = await cache.get("organizations:all")
+    cache_key = f"organizations:user:{ctx.user_id}"
+    cached_data = await cache.get(cache_key)
     if cached_data is not None:
         return cached_data
         
-    orgs = await Organization.find_all().to_list()
+    orgs = await Organization.find(Organization.owner_id == ctx.user_id).to_list()
     result = [
         OrganizationResponse(
             id=str(org.id),
@@ -288,7 +302,7 @@ async def list_orgs(request: Request):
     
     # Store plain pydantic models or dicts in cache, we'll store the dict representation
     # Actually FastAPI automatically converts returned Pydantic models, but for cache we should store raw dicts
-    await cache.set("organizations:all", result, ttl=settings.cache.ttl)
+    await cache.set(cache_key, result, ttl=settings.cache.ttl)
     return result
 
 @org_router.get("/{org_id}", response_model=OrganizationResponse)
@@ -301,19 +315,7 @@ async def get_org(org_id: str):
         org = await Organization.find_one(Organization.slug == org_id)
         
     if not org:
-        # Prepopulate default org if none exists so the app doesn't break
-        org = await Organization.find_one(Organization.slug == "my-personal-org")
-        if not org:
-            org = Organization(
-                name="My Personal Org",
-                slug="my-personal-org",
-                owner_id="system",
-                plan="free",
-                settings={"environment_mode": "Development"},
-                limits={"max_workflows": 10, "max_executions_daily": 1000}
-            )
-            await org.insert()
-            
+        raise HTTPException(status_code=404, detail="Organization not found")
     return OrganizationResponse(
         id=str(org.id),
         name=org.name,
@@ -350,7 +352,7 @@ async def update_org_settings(org_id: str, org_data: OrganizationSettingsUpdate,
     org.settings["environment_mode"] = org_data.environment_mode.value
     await org.save()
     
-    await request.app.state.memory_cache.delete("organizations:all")
+    await request.app.state.memory_cache.delete(f"organizations:user:{org.owner_id}")
     return OrganizationResponse(
         id=str(org.id),
         name=org.name,
@@ -371,9 +373,9 @@ async def build_workflow_response(wf: Workflow) -> WorkflowResponse:
         "id": str(wf.id),
         "name": wf.name,
         "description": wf.description or "",
-        "tags": ["Enterprise", "AI", "Automation"],
-        "createdAt": "2026-08-01T20:00:00Z",
-        "updatedAt": "2026-08-01T20:00:00Z"
+        "tags": [],
+        "createdAt": wf.created_at.isoformat() if hasattr(wf, "created_at") else "",
+        "updatedAt": wf.updated_at.isoformat() if hasattr(wf, "updated_at") else ""
     }
     return WorkflowResponse(
         id=str(wf.id),
@@ -416,13 +418,15 @@ async def create_workflow(wf_data: WorkflowCreate, request: Request):
     await wf.insert()
     
     if wf_data.nodes or wf_data.edges:
+        if not ctx or not ctx.user_id:
+            raise HTTPException(status_code=401, detail="User context missing")
         wv = WorkflowVersion(
             workflow_id=str(wf.id),
             version="v1",
             nodes=wf_data.nodes or [],
             edges=wf_data.edges or [],
             settings={"variables": wf_data.variables or {}},
-            created_by="system"
+            created_by=ctx.user_id
         )
         await wv.insert()
     
@@ -504,13 +508,15 @@ async def update_workflow(wf_id: str, wf_data: WorkflowCreate, request: Request)
             wv.settings["variables"] = wf_data.variables
         await wv.save()
     elif wf_data.nodes or wf_data.edges:
+        if not ctx or not ctx.user_id:
+            raise HTTPException(status_code=401, detail="User context missing")
         wv = WorkflowVersion(
             workflow_id=str(wf.id),
             version="v1",
             nodes=wf_data.nodes or [],
             edges=wf_data.edges or [],
             settings={"variables": wf_data.variables or {}},
-            created_by="system"
+            created_by=ctx.user_id
         )
         await wv.insert()
 
@@ -541,6 +547,11 @@ async def delete_workflow(wf_id: str, request: Request):
 
 @wf_router.post("/{wf_id}/versions", response_model=VersionResponse)
 async def create_version(wf_id: str, request: Request, version_data: VersionCreate = VersionCreate()):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     try:
         wf_oid = ObjectId(wf_id)
     except Exception:
@@ -550,23 +561,28 @@ async def create_version(wf_id: str, request: Request, version_data: VersionCrea
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
         
+    if wf.organization_id != ctx.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied: organization mismatch")
+        
     # Increment version string (e.g., v1 -> v2)
     curr_num = int(wf.current_version.lstrip("v")) if wf.current_version.startswith("v") else 1
     new_version_str = f"v{curr_num + 1}"
     wf.current_version = new_version_str
     await wf.save()
     
+    if not ctx or not ctx.user_id:
+        raise HTTPException(status_code=401, detail="User context missing")
     wf_version = WorkflowVersion(
         workflow_id=wf_id,
         version=new_version_str,
         nodes=version_data.nodes,
         edges=version_data.edges,
         settings=version_data.settings,
-        created_by="system"
+        created_by=ctx.user_id
     )
     await wf_version.insert()
     
-    await request.app.state.memory_cache.delete("workflows:all")
+    await request.app.state.memory_cache.delete(f"workflows:all:{ctx.organization_id}")
     await request.app.state.memory_cache.delete(f"workflow:{wf_id}")
     await request.app.state.memory_cache.delete(f"workflow_version:{new_version_str}")
     
@@ -582,6 +598,11 @@ async def create_version(wf_id: str, request: Request, version_data: VersionCrea
 
 @wf_router.get("/{wf_id}/versions/latest", response_model=VersionResponse)
 async def get_latest_version(wf_id: str):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     try:
         wf_oid = ObjectId(wf_id)
     except Exception:
@@ -590,6 +611,9 @@ async def get_latest_version(wf_id: str):
     wf = await Workflow.get(wf_oid)
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
+        
+    if wf.organization_id != ctx.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied: organization mismatch")
         
     wf_version = await WorkflowVersion.find_one(
         WorkflowVersion.workflow_id == wf_id,
@@ -604,7 +628,7 @@ async def get_latest_version(wf_id: str):
             nodes=[],
             edges=[],
             settings={},
-            created_by="system"
+            created_by=ctx.user_id if ctx and ctx.user_id else "unknown"
         )
         
     return VersionResponse(
@@ -712,30 +736,81 @@ async def execute_workflow(wf_id: str, exec_data: ExecutionCreate, request: Requ
 
 @wf_router.post("/{wf_id}/executions/{exec_id}/pause")
 async def pause_execution(wf_id: str, exec_id: str, request: Request):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
     try:
+        from bson import ObjectId
+        ex = await Execution.get(ObjectId(exec_id))
+        if not ex or ex.organization_id != ctx.organization_id:
+            raise HTTPException(status_code=403, detail="Access denied")
         await request.app.state.execution_service.pause_execution(exec_id)
         return {"message": "Pause signal sent successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @wf_router.post("/{wf_id}/executions/{exec_id}/resume")
 async def resume_execution(wf_id: str, exec_id: str, request: Request):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
     try:
+        from bson import ObjectId
+        ex = await Execution.get(ObjectId(exec_id))
+        if not ex or ex.organization_id != ctx.organization_id:
+            raise HTTPException(status_code=403, detail="Access denied")
         await request.app.state.execution_service.resume_execution(exec_id)
         return {"message": "Resume signal sent successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @wf_router.post("/{wf_id}/executions/{exec_id}/cancel")
 async def cancel_execution(wf_id: str, exec_id: str, request: Request):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
     try:
+        from bson import ObjectId
+        ex = await Execution.get(ObjectId(exec_id))
+        if not ex or ex.organization_id != ctx.organization_id:
+            raise HTTPException(status_code=403, detail="Access denied")
         await request.app.state.execution_service.cancel_execution(exec_id)
         return {"message": "Cancellation request sent successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @wf_router.get("/{wf_id}/executions", response_model=List[ExecutionResponse])
 async def list_executions(wf_id: str, request: Request):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or not ctx.organization_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        from bson import ObjectId
+        wf_oid = ObjectId(wf_id)
+        wf = await Workflow.get(wf_oid)
+    except Exception:
+        wf = await Workflow.find_one(Workflow.name == wf_id)
+        
+    if not wf:
+        wf = await Workflow.find_one(Workflow.id == wf_id)
+        
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+        
+    if wf.organization_id != ctx.organization_id:
+        raise HTTPException(status_code=403, detail="Access denied: organization mismatch")
+
     cache = request.app.state.memory_cache
     cached_data = await cache.get(f"workflow_executions:{wf_id}")
     if cached_data is not None:
@@ -791,9 +866,7 @@ async def websocket_endpoint(
         exec_obj = await Execution.get(ObjectId(execution_id))
         if exec_obj:
             tenant_id = exec_obj.organization_id
-            from app.core.settings import settings
-            is_dev = settings.env == "development"
-            if not is_dev and ctx.organization_id != tenant_id:
+            if ctx.organization_id != tenant_id:
                 await websocket.close(code=1008)
                 return
         else:
@@ -828,6 +901,10 @@ async def websocket_endpoint(
 
 @debug_router.post("/executions/{execution_id}/replay")
 async def replay_execution(execution_id: str, tenant_id: str):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or ctx.organization_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         res = await ReplayEngine.trigger_replay(execution_id, tenant_id)
         return res
@@ -838,6 +915,10 @@ async def replay_execution(execution_id: str, tenant_id: str):
 
 @debug_router.post("/executions/{execution_id}/restart")
 async def restart_execution(execution_id: str, from_node_id: str, tenant_id: str):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or ctx.organization_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         res = await ReplayEngine.trigger_restart(execution_id, from_node_id, tenant_id)
         return res
@@ -848,6 +929,10 @@ async def restart_execution(execution_id: str, from_node_id: str, tenant_id: str
 
 @debug_router.post("/executions/diff")
 async def diff_executions(execution_id_a: str, execution_id_b: str, tenant_id: str):
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    if not ctx or ctx.organization_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     snap_a = await EventStore.get_snapshot(execution_id_a)
     snap_b = await EventStore.get_snapshot(execution_id_b)
     if not snap_a or not snap_b:
@@ -868,34 +953,46 @@ class CredentialRequest(BaseModel):
 
 @debug_router.get("/models")
 async def get_model_catalog():
+    from app.core.settings import settings
+    import os
+
+    configured_providers = []
+    
+    if os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"):
+        configured_providers.append({"id": "google", "name": "Google Gemini", "icon": "Cpu"})
+        
+    if os.getenv("OPENAI_API_KEY"):
+        configured_providers.append({"id": "openai", "name": "OpenAI", "icon": "Cpu"})
+        
+    if os.getenv("ANTHROPIC_API_KEY"):
+        configured_providers.append({"id": "anthropic", "name": "Anthropic", "icon": "Cpu"})
+        
+    if settings.openrouter.api_key:
+        configured_providers.append({"id": "openrouter", "name": "OpenRouter", "icon": "Cpu"})
+
     openrouter_models = [
         {"id": "openrouter/auto", "name": "OpenRouter Auto Router"}
     ]
-    try:
-        import httpx
-        async with httpx.AsyncClient() as client:
-            res = await client.get("https://openrouter.ai/api/v1/models", timeout=5.0)
-            if res.status_code == 200:
-                data = res.json()
-                fetched = []
-                for m in data.get("data", []):
-                    fetched.append({
-                        "id": m.get("id"),
-                        "name": m.get("name") or m.get("id")
-                    })
-                if fetched:
-                    openrouter_models = fetched
-    except Exception:
-        # Fallback if connection fails
-        pass
+    if settings.openrouter.api_key:
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                res = await client.get("https://openrouter.ai/api/v1/models", timeout=5.0)
+                if res.status_code == 200:
+                    data = res.json()
+                    fetched = []
+                    for m in data.get("data", []):
+                        fetched.append({
+                            "id": m.get("id"),
+                            "name": m.get("name") or m.get("id")
+                        })
+                    if fetched:
+                        openrouter_models = fetched
+        except Exception:
+            pass
 
     return {
-        "providers": [
-            {"id": "google", "name": "Google Gemini", "icon": "Cpu"},
-            {"id": "openai", "name": "OpenAI", "icon": "Cpu"},
-            {"id": "anthropic", "name": "Anthropic", "icon": "Cpu"},
-            {"id": "openrouter", "name": "OpenRouter", "icon": "Cpu"}
-        ],
+        "providers": configured_providers,
         "models": {
             "google": [
                 {"id": "google/gemini-2.5-flash", "name": "Gemini 2.5 Flash"},
@@ -1004,45 +1101,7 @@ class InstallRequest(BaseModel):
 
 pkg_router = APIRouter(prefix="/packages", tags=["Packages"])
 
-def ensure_marketplace_populated():
-    from app.core.packages import PackageMarketplace, PackageManifest
-    if not PackageMarketplace.list_packages():
-        defaults = [
-            PackageManifest(
-                name="@fluxa/core-extensions",
-                version="1.2.0",
-                author="Fluxa Official",
-                publisher="fluxa-official",
-                description="Extended logic nodes including Regex matching, Date formatting, and UUID generators.",
-                engines={"fluxa": ">=1.0.0"}
-            ),
-            PackageManifest(
-                name="@fluxa/openai-vision",
-                version="2.0.1",
-                author="AI Community",
-                publisher="fluxa-official",
-                description="Vision-capable image analysis and OCR nodes for OpenAI GPT-4o.",
-                engines={"fluxa": ">=1.0.0"}
-            ),
-            PackageManifest(
-                name="@fluxa/salesforce-crm",
-                version="1.0.4",
-                author="Enterprise Team",
-                publisher="fluxa-official",
-                description="Connectors for Salesforce CRM accounts, leads, and opportunity triggers.",
-                engines={"fluxa": ">=1.0.0"}
-            ),
-            PackageManifest(
-                name="@fluxa/aws-s3",
-                version="1.1.0",
-                author="CloudOps",
-                publisher="fluxa-official",
-                description="Upload, download, and stream buckets directly from AWS S3 compatible storage.",
-                engines={"fluxa": ">=1.0.0"}
-            )
-        ]
-        for pkg in defaults:
-            PackageMarketplace.publish(pkg)
+
 
 @pkg_router.get("/")
 async def list_packages():
@@ -1063,7 +1122,7 @@ async def list_packages():
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
         
-    ensure_marketplace_populated()
+
     installed = org.settings.get("installed_packages", {})
     
     available = PackageMarketplace.list_packages()
@@ -1078,7 +1137,7 @@ async def list_packages():
             "description": pkg.description or "",
             "installed": inst_meta is not None,
             "installed_metadata": inst_meta,
-            "category": "AI" if "vision" in pkg.name else "Utilities" if "core" in pkg.name else "Communication" if "salesforce" in pkg.name else "Files"
+            "category": pkg.category or "Other"
         })
     return result
 
@@ -1100,7 +1159,7 @@ async def install_package(req_data: InstallRequest):
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
         
-    ensure_marketplace_populated()
+
     
     report = PackageMarketplace.install(
         req_data.package_name,
@@ -1139,7 +1198,7 @@ async def uninstall_package(req_data: InstallRequest):
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
         
-    ensure_marketplace_populated()
+
     
     installed = org.settings.get("installed_packages", {})
     if req_data.package_name not in installed:
@@ -1164,10 +1223,11 @@ async def uninstall_package(req_data: InstallRequest):
     
     return {"status": "uninstalled", "package_name": req_data.package_name}
 
-
 telegram_router = APIRouter(prefix="/webhooks/telegram", tags=["Webhooks"])
 
-@telegram_router.post("")
+from app.core.security.rate_limit import rate_limit_webhook
+
+@telegram_router.post("", dependencies=[Depends(rate_limit_webhook)])
 async def telegram_webhook(update: dict, request: Request):
     message = update.get("message")
     if not message:
@@ -1220,12 +1280,8 @@ async def telegram_webhook(update: dict, request: Request):
             nodes_snapshot=[],
             edges_snapshot=[],
             metadata={
-                "workspace_id": "default",
-                "environment_id": "default",
-                "project_id": "default",
                 "user_id": f"telegram_{chat_id}",
-                "correlation_id": f"telegram-{chat_id}-{datetime.now(timezone.utc).timestamp()}",
-                "permissions": ["*"]
+                "correlation_id": f"telegram-{chat_id}-{datetime.now(timezone.utc).timestamp()}"
             },
             variables={
                 "telegram_message": text,

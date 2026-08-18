@@ -78,7 +78,7 @@ export function AuthPage() {
     <div className="flex h-full w-full items-center justify-center bg-background">
       <div className="w-full max-w-md p-8 bg-card rounded-lg shadow-xl shadow-black/40 border border-border">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-black text-primary mb-2">Fluxa Auth</h1>
+          <h1 className="text-3xl font-black text-primary mb-2">iNode Auth</h1>
           <p className="text-sm text-muted-foreground">
             {isLogin ? 'Sign in to your account' : 'Create a new developer account'}
           </p>
@@ -111,7 +111,7 @@ export function AuthPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-              placeholder="dev@fluxa.ai"
+              placeholder="dev@inode.ai"
               required
             />
           </div>

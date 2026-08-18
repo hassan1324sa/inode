@@ -107,9 +107,9 @@ class WorkflowOrchestrator:
                 node_type = node_def.get("type", "core")
                 
                 # Select task queue based on node type
-                if node_type == "ai":
+                if node_type == "ai_agent":
                     task_queue = "fluxa-ai"
-                elif node_type == "http":
+                elif node_type == "http_request":
                     task_queue = "fluxa-http"
                 else:
                     task_queue = "fluxa-core"
@@ -152,9 +152,9 @@ class WorkflowOrchestrator:
                             sub_node_type = sub_node.get("type", "core")
                             
                             sub_queue = "fluxa-core"
-                            if sub_node_type == "ai":
+                            if sub_node_type == "ai_agent":
                                 sub_queue = "fluxa-ai"
-                            elif sub_node_type == "http":
+                            elif sub_node_type == "http_request":
                                 sub_queue = "fluxa-http"
                                 
                             # Run the child node as a real Temporal Activity with explicit RetryPolicy

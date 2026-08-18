@@ -37,7 +37,7 @@ export const WorkflowsPage: React.FC = () => {
         } else if (res.status === 404) {
           throw new Error('Workflows endpoint not found.');
         } else if (res.status >= 500) {
-          throw new Error('Fluxa API returned an internal server error.');
+          throw new Error('iNode API returned an internal server error.');
         }
         
         let serverError = '';
@@ -53,8 +53,8 @@ export const WorkflowsPage: React.FC = () => {
     } catch (err: any) {
       const msg = err.message || '';
       if (msg === 'Failed to fetch' || msg.includes('NetworkError')) {
-        setError('Unable to connect to Fluxa API.');
-        showToast('Unable to connect to Fluxa API.', 'error');
+        setError('Unable to connect to iNode API.');
+        showToast('Unable to connect to iNode API.', 'error');
       } else {
         setError(msg || 'Unable to connect to workflows service.');
         showToast(msg || 'Error loading workflows', 'error');

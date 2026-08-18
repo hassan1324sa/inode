@@ -18,13 +18,19 @@ class FileStorageNodeExecutor(BaseNodeExecutor):
         # Resolve variables in file path
         file_path = VariableResolver.resolve(file_path_raw, context.variables, context.node_outputs)
         
-        # If relative, resolve relative to workspace root (d:\Fluxa)
-        if not os.path.isabs(file_path):
-            # Check for leading slash/dot
-            if file_path.startswith("/") or file_path.startswith("\\"):
-                file_path = file_path[1:]
-            file_path = os.path.join(r"d:\Fluxa", file_path)
+        import tempfile
+        base_dir = os.path.abspath(tempfile.gettempdir())
+        
+        # Strip absolute path elements to treat all paths as relative to base_dir
+        safe_rel_path = file_path.lstrip("/\\")
+        if ":" in safe_rel_path:
+            safe_rel_path = safe_rel_path.split(":", 1)[1].lstrip("/\\")
             
+        resolved_path = os.path.abspath(os.path.join(base_dir, safe_rel_path))
+        if os.path.commonpath([base_dir, resolved_path]) != os.path.normpath(base_dir):
+            raise ValueError(f"Invalid path traversal. Access to {file_path} is denied.")
+            
+        file_path = resolved_path
         if operation == "write":
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             content_raw = node_data.get("content", "")

@@ -95,6 +95,11 @@ async def test_workflow_ownership_and_mcp_runtime_isolation():
 
     # Org B executes tool -> OK
     mcp_tool_b = MCPTool(server_name="postgres_mcp", tool_name="query_db")
+    
+    driver = MCPProviderManager.get_mcp_driver("postgres_mcp")
+    async def dummy_handler(tool, args): return {"status": "success"}
+    driver._tool_handler = dummy_handler
+    
     res_b = await mcp_tool_b.execute({"query": "SELECT 1"}, None)
     assert res_b["status"] == "success"
 

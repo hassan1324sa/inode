@@ -1,6 +1,7 @@
 import re
+from pathlib import Path
 
-file_path = r"c:\Users\Latitude 5480\OneDrive\Desktop\Fluxa\backend\app\api\v1\endpoints.py"
+file_path = str(Path(__file__).resolve().parent.parent / "app" / "api" / "v1" / "endpoints.py")
 
 with open(file_path, "r", encoding="utf-8") as f:
     content = f.read()

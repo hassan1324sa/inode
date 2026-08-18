@@ -14,7 +14,7 @@ class TelegramSendExecutor(BaseNodeExecutor):
         node_id = node_data.get("id", "telegram_send")
         data_sub = node_data.get("data", {})
         bot_token_path = node_data.get("botToken") or node_data.get("botToken_ref") or data_sub.get("botToken") or data_sub.get("botToken_ref")
-        chat_id_raw = node_data.get("chatId") or data_sub.get("chatId") or data_sub.get("chat_id") or "{{telegram_chat_id}}"
+        chat_id_raw = node_data.get("chatId") or data_sub.get("chatId") or data_sub.get("chat_id") or ""
         message_raw = node_data.get("message") or data_sub.get("message") or "Hello from Fluxa!"
 
         from app.core.security.secrets import VaultSecretProvider, SecretRef
@@ -37,8 +37,9 @@ class TelegramSendExecutor(BaseNodeExecutor):
         if not bot_token:
             raise ValueError("Telegram Send Node: Telegram Bot Token (Vault) is required.")
         if not chat_id:
-            # Fallback to a valid dummy chatId to prevent workflow failure in demonstration runs
-            chat_id = context.variables.get("telegram_chat_id") or "123456789"
+            chat_id = context.variables.get("telegram_chat_id")
+        if not chat_id:
+            raise ValueError("Telegram Send Node: chat_id is required.")
 
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
         payload = {

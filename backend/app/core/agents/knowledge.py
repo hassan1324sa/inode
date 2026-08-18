@@ -58,10 +58,10 @@ class ChunkingPipeline:
         return chunks
 
 
-class SimpleEmbeddingEngine:
+class LexicalFallbackEmbeddingEngine:
     """
-    Computes a simplified text embedding representing word frequencies
-    for local vector similarity without requiring remote APIs.
+    Computes a simplified lexical (Bag-of-Words) approximation for text representation.
+    This is a lexical/BOW approximation and is not semantic embedding.
     """
     def compute_embedding(self, text: str) -> List[float]:
         # Basic word occurrence representation normalized
@@ -85,7 +85,7 @@ class SimpleEmbeddingEngine:
 class KnowledgeLayer:
     def __init__(self, chunker: Optional[ChunkingPipeline] = None, embedding_engine: Optional[Any] = None):
         self.chunker = chunker or ChunkingPipeline()
-        self.emb_engine = embedding_engine or SimpleEmbeddingEngine()
+        self.emb_engine = embedding_engine or LexicalFallbackEmbeddingEngine()
         self.documents: Dict[str, Document] = {}
         self.chunks: List[Chunk] = []
 
