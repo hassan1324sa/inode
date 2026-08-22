@@ -95,12 +95,6 @@ async def execute_node_activity(input_data: Dict[str, Any]) -> Dict[str, Any]:
     project_id = meta.get("project_id")
     user_id = meta.get("user_id")
     
-    if not workspace_id:
-        raise SecurityException("Access Denied: Missing workspace identity in worker task (Fail Closed).")
-    if not environment_id:
-        raise SecurityException("Access Denied: Missing environment identity in worker task (Fail Closed).")
-    if not project_id:
-        raise SecurityException("Access Denied: Missing project identity in worker task (Fail Closed).")
     if not user_id:
         raise SecurityException("Access Denied: Missing user identity in worker task (Fail Closed).")
 

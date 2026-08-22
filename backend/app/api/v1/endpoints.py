@@ -848,35 +848,44 @@ async def websocket_endpoint(
     last_sequence: int = 0,
     token: Optional[str] = None
 ):
-    # Authentication check
-    if not token:
-        await websocket.close(code=1008)
-        return
-        
-    try:
-        from app.core.security.jwt import decode_access_token
-        ctx = decode_access_token(token)
-    except Exception:
-        await websocket.close(code=1008)
+    print("WS DEBUG: Start")
+    from app.core.security.context import SecurityContextHolder
+    ctx = SecurityContextHolder.get_current_context()
+    
+    if not ctx:
+        print("WS DEBUG: ctx is None")
+        await websocket.close(code=1008, reason="Unauthorized")
         return
 
+    print(f"WS DEBUG: ctx exists. ctx.organization_id={ctx.organization_id}")
     try:
         from app.models.execution import Execution
         from bson import ObjectId
         exec_obj = await Execution.get(ObjectId(execution_id))
+        
+        # Override tenant_id with the actual execution's tenant if it exists
         if exec_obj:
-            tenant_id = exec_obj.organization_id
-            if ctx.organization_id != tenant_id:
-                await websocket.close(code=1008)
+            actual_tenant_id = exec_obj.organization_id
+            print(f"WS DEBUG: exec_obj found. actual_tenant_id={actual_tenant_id}")
+            if ctx.organization_id != actual_tenant_id:
+                print("WS DEBUG: Cross-tenant 1")
+                await websocket.close(code=1008, reason="Cross-tenant access denied")
                 return
+            tenant_id = actual_tenant_id
         else:
+            print("WS DEBUG: exec_obj not found")
             if ctx.organization_id != tenant_id:
-                await websocket.close(code=1008)
+                print("WS DEBUG: Cross-tenant 2")
+                await websocket.close(code=1008, reason="Cross-tenant access denied")
                 return
-    except Exception:
-        if ctx.organization_id != tenant_id:
-            await websocket.close(code=1008)
-            return
+    except Exception as e:
+        print(f"WS DEBUG: Exception {e}")
+        # SEC-FIX: Do not fall back to user-supplied tenant_id on DB error. Default deny.
+        await websocket.close(code=1008, reason="Internal error or invalid execution")
+        return
+        
+    print("WS DEBUG: Accepting websocket...")
+    # Authentication check already handled by SecurityContextASGIMiddleware
         
     await websocket.accept()
 

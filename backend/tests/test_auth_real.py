@@ -84,7 +84,7 @@ async def test_jwt_validation_and_tampering(client: AsyncClient):
     # But first let's try with missing token
     resp = await client.get("/api/v1/organizations/")
     assert resp.status_code == 401
-    assert "Missing or invalid authorization header" in resp.json()["message"]
+    assert "Missing or invalid token" in resp.json()["message"]
 
     # Access with valid token
     resp = await client.get("/api/v1/organizations/", headers={"Authorization": f"Bearer {token}"})

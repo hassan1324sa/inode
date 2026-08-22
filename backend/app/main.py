@@ -68,7 +68,7 @@ class SecurityContextASGIMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
+        if scope["type"] not in ("http", "websocket"):
             await self.app(scope, receive, send)
             return
 
@@ -92,7 +92,7 @@ class SecurityContextASGIMiddleware:
         method = scope.get("method", "")
 
         # Pass preflight OPTIONS requests straight through so CORS works
-        if method == "OPTIONS":
+        if scope["type"] == "http" and method == "OPTIONS":
             await self.app(scope, receive, send)
             return
 
@@ -101,38 +101,65 @@ class SecurityContextASGIMiddleware:
             await self._call_with_correlation(scope, receive, send, correlation_id)
             return
 
-        # All other routes — require Bearer token
-        auth_header = headers.get("authorization", "")
-        if not auth_header or not auth_header.lower().startswith("bearer "):
+        # All other routes — require token
+        token = None
+        auth_header = next((v for k, v in scope.get("headers", []) if k.decode("latin1").lower() == "authorization"), None)
+        if auth_header:
+            parts = auth_header.decode("latin1").split()
+            if len(parts) == 2 and parts[0].lower() == "bearer":
+                token = parts[1]
+
+        if not token and scope["type"] == "websocket":
+            query_string = scope.get("query_string", b"").decode("utf-8")
+            from urllib.parse import parse_qs, urlencode
+            qs = parse_qs(query_string)
+            if "token" in qs:
+                token = qs["token"][0]
+                qs["token"] = ["***REDACTED***"]
+                scope["query_string"] = urlencode(qs, doseq=True).encode("utf-8")
+
+        if not token:
             await self._send_401(
                 send,
-                "Missing or invalid authorization header",
-                "Authorization header must be Bearer token",
+                "Missing or invalid token",
+                "Authorization token is required",
+                scope["type"]
             )
             return
 
-        token = auth_header[7:].strip()
         try:
             ctx = decode_access_token(token)
+            print(f"MIDDLEWARE DEBUG: Token decoded. ctx={ctx}")
             ctx.correlation_id = correlation_id
             SecurityContextHolder.set_context(ctx)
         except Exception as exc:
             import logging
+            print(f"MIDDLEWARE DEBUG: Exception decoding token! {exc}")
             logging.getLogger(__name__).warning(f"JWT Validation failed: {exc}")
             await self._send_401(
                 send,
                 "Invalid or expired JWT token",
-                "Please log in again."
+                "Please log in again.",
+                scope["type"]
             )
             return
 
+        print("MIDDLEWARE DEBUG: Passing to self.app")
         await self._call_with_correlation(scope, receive, send, correlation_id)
 
     # -----------------------------------------------------------------------
     # Helpers
     # -----------------------------------------------------------------------
 
-    async def _send_401(self, send, message: str, detail: str):
+    async def _send_401(self, send, message: str, detail: str, scope_type: str = "http"):
+        if scope_type == "websocket":
+            await send({
+                "type": "websocket.close",
+                "code": 1008,
+                "reason": message
+            })
+            return
+
         import json
         body = json.dumps(
             {
@@ -148,11 +175,16 @@ class SecurityContextASGIMiddleware:
                 "status": 401,
                 "headers": [
                     (b"content-type", b"application/json"),
-                    (b"content-length", str(len(body)).encode("utf-8")),
+                    (b"access-control-allow-origin", b"*"),
                 ],
             }
         )
-        await send({"type": "http.response.body", "body": body, "more_body": False})
+        await send(
+            {
+                "type": "http.response.body",
+                "body": body,
+            }
+        )
 
     async def _call_with_correlation(self, scope, receive, send, correlation_id: str):
         """Wrap send to inject X-Correlation-ID into every response."""
