@@ -21,7 +21,7 @@ auth_router = APIRouter(prefix="/auth", tags=["Auth"])
 @auth_router.post("/register", response_model=UserResponse)
 async def register(user_data: UserCreate, request: Request):
     # Check if user already exists
-    existing_user = await User.find_one(User.email == user_data.email)
+    existing_user = await User.find_one({"email": user_data.email})
     if existing_user:
         raise HTTPException(status_code=400, detail="User with this email already exists")
 
@@ -56,7 +56,7 @@ async def login(req: LoginRequest):
     if not req.email or not req.password:
         raise HTTPException(status_code=400, detail="Email and password are required")
         
-    user = await User.find_one(User.email == req.email)
+    user = await User.find_one({"email": req.email})
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
         
